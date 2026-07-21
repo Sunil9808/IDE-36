@@ -120,12 +120,15 @@ export default function Explorer() {
 
       {workspace ? (
         <div className="flex-1 overflow-y-auto py-1">
-          <div className="px-2 py-1">
-            <div className="flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-[11px] font-semibold uppercase tracking-normal no-select" style={{ color: 'var(--color-textMuted)' }}>
-              <ChevronDown size={12} />
-              <span>{workspace.name}</span>
+          {workspace.id !== 'ide-default' && (
+            <div className="px-2 py-1">
+              <div className="flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-[11px] font-semibold uppercase tracking-normal no-select" style={{ color: 'var(--color-textMuted)' }}>
+                <ChevronDown size={12} />
+                <span>{workspace.name}</span>
+              </div>
             </div>
-          </div>
+          )}
+
 
           {fileTree.map((node) => (
             <FileTreeNode

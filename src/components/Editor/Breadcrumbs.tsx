@@ -1,9 +1,9 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, LayoutTemplate } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import FileTypeIcon from '../Icons/FileTypeIcon';
 
 export default function Breadcrumbs() {
-  const { getActiveTab } = useEditorStore();
+  const { getActiveTab, splitConfig, setSplitConfig } = useEditorStore();
   const activeTab = getActiveTab();
 
   if (!activeTab) return null;
@@ -36,6 +36,18 @@ export default function Breadcrumbs() {
           </div>
         );
       })}
+      {activeTab.language === 'html' && (
+        <div className="ml-auto flex items-center pr-2">
+          <button
+            onClick={() => setSplitConfig({ enabled: !splitConfig.enabled, direction: 'vertical' })}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors hover:bg-white/10 hover:text-white text-[11px]"
+            title="Toggle Live Preview"
+          >
+            <LayoutTemplate size={12} />
+            {splitConfig.enabled ? 'Close Preview' : 'Live Preview'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

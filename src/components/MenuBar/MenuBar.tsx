@@ -76,7 +76,7 @@ export default function MenuBar() {
         { label: 'Source Control', shortcut: 'Ctrl+Shift+G', action: () => setActiveSidebarPanel('git') },
         { label: 'Run & Debug', shortcut: 'Ctrl+Shift+D', action: () => setActiveSidebarPanel('debug') },
         { label: 'Extensions', shortcut: 'Ctrl+Shift+X', action: () => setActiveSidebarPanel('extensions') },
-        { label: 'AI Pair Programmer', shortcut: 'Ctrl+Shift+A', action: () => setRightPanelVisible(true) },
+        { label: 'Anywhere AI', shortcut: 'Ctrl+Shift+A', action: () => setRightPanelVisible(true) },
         { label: '', separator: true },
         { label: 'Toggle Sidebar', shortcut: 'Ctrl+B', action: toggleSidebar },
         { label: 'Toggle Terminal', shortcut: 'Ctrl+`', action: toggleBottomPanel },

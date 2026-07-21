@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useAIStore } from '../store/aiStore';
 import { useEditorStore } from '../store/editorStore';
+import { useWorkspaceStore } from '../store/workspaceStore';
 import { ChatMessage } from '../types/ai.types';
 import { v4 as uuidv4 } from '../utils/uuid';
 
@@ -12,6 +13,7 @@ export function useAIChat() {
   } = useAIStore();
 
   const { getActiveTab } = useEditorStore();
+  const workspace = useWorkspaceStore((state) => state.workspace);
 
   const buildContext = useCallback(() => {
     const activeTab = getActiveTab();
@@ -22,10 +24,11 @@ export function useAIChat() {
         language: activeTab.language,
         name: activeTab.fileName,
       } : undefined,
-      workspaceName: 'my-project',
+      workspaceName: workspace?.name || 'my-project',
+      workspacePath: workspace?.path,
       ...context,
     };
-  }, [context, getActiveTab]);
+  }, [context, getActiveTab, workspace]);
 
   const sendMessage = useCallback(async (prompt: string) => {
     if (!prompt.trim() || isStreaming) return;

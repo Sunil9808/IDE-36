@@ -20,7 +20,7 @@ const activities = [
   { id: 'debug', icon: Bug, title: 'Run and Debug (Ctrl+Shift+D)' },
   { id: 'extensions', icon: Puzzle, title: 'Extensions (Ctrl+Shift+X)' },
   { id: 'thunder', icon: Zap, title: 'Thunder Client' },
-  { id: 'ai', icon: Sparkles, title: 'AI Assistant (Ctrl+Alt+I)' },
+  { id: 'ai', icon: Sparkles, title: 'Anywhere AI (Ctrl+Alt+I)' },
 ];
 
 export default function ActivityBar() {

@@ -23,7 +23,7 @@ function getExtension(name: string): string {
 }
 
 function generateId(filePath: string): string {
-  return Buffer.from(filePath).toString('base64').slice(0, 16);
+  return Buffer.from(filePath).toString('base64').replace(/=/g, '');
 }
 
 export async function buildFileTree(dirPath: string, depth = 0): Promise<FileNode[]> {
@@ -37,9 +37,6 @@ export async function buildFileTree(dirPath: string, depth = 0): Promise<FileNod
       if (IGNORED_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
 
       const fullPath = path.join(dirPath, entry.name);
-      const stats = await fs.stat(fullPath).catch(() => null);
-
-      if (!stats) continue;
 
       const node: FileNode = {
         id: generateId(fullPath),
@@ -47,8 +44,6 @@ export async function buildFileTree(dirPath: string, depth = 0): Promise<FileNod
         path: fullPath,
         type: entry.isDirectory() ? 'directory' : 'file',
         extension: entry.isDirectory() ? undefined : getExtension(entry.name),
-        size: entry.isFile() ? stats.size : undefined,
-        lastModified: stats.mtimeMs,
       };
 
       if (entry.isDirectory()) {

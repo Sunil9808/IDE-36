@@ -51,6 +51,7 @@ function getAIClient(): OpenAI {
       baseURL: isSambaNova
         ? process.env.SAMBANOVA_BASE_URL || 'https://api.sambanova.ai/v1'
         : process.env.OPENAI_BASE_URL,
+      timeout: 30000, // 30 second timeout to avoid hanging on slow models
     });
   }
   return aiClient;
@@ -78,6 +79,7 @@ export interface AIContext {
   };
   openFiles?: Array<{ path: string; name: string; language: string }>;
   workspaceName?: string;
+  workspacePath?: string;
   recentErrors?: string[];
   terminalOutput?: string;
 }

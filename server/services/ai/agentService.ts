@@ -5,9 +5,6 @@ import { promisify } from 'util';
 import { getChatCompletion, AIContext } from './aiService';
 
 const execAsync = promisify(exec);
-const workspaceRoot = path.basename(process.cwd()).toLowerCase() === 'server'
-  ? path.resolve(process.cwd(), '..')
-  : process.cwd();
 const MAX_OUTPUT = 5000;
 
 type AgentAction =
@@ -118,12 +115,12 @@ function getActionTarget(action: AgentAction): string {
   return action.type;
 }
 
-function resolveWorkspacePath(value: string): string {
+function resolveWorkspacePath(value: string, effectiveRoot: string): string {
   const requested = value.trim();
   if (!requested) throw new Error('Path is required');
 
-  const resolved = path.resolve(workspaceRoot, requested);
-  const relative = path.relative(workspaceRoot, resolved);
+  const resolved = path.resolve(effectiveRoot, requested);
+  const relative = path.relative(effectiveRoot, resolved);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Refusing to access path outside workspace: ${value}`);
   }
@@ -153,26 +150,26 @@ function isLongRunningCommand(command: string): boolean {
   return /^npm\s+run\s+dev(?::client|:server)?(?:\s|$)/i.test(command.trim());
 }
 
-async function runWorkspaceCommand(command: string): Promise<string> {
+async function runWorkspaceCommand(command: string, effectiveRoot: string): Promise<string> {
   if (!isAllowedCommand(command)) {
     throw new Error(`Command is not allowed for agent execution: ${command}`);
   }
 
   if (isLongRunningCommand(command)) {
     const child = spawn(command, {
-      cwd: workspaceRoot,
+      cwd: effectiveRoot,
       shell: true,
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
     });
     child.unref();
-    return `Started background command: ${command}\nWorkspace: ${workspaceRoot}`;
+    return `Started background command: ${command}\nWorkspace: ${effectiveRoot}`;
   }
 
   try {
     const { stdout, stderr } = await execAsync(command, {
-      cwd: workspaceRoot,
+      cwd: effectiveRoot,
       windowsHide: true,
       timeout: 120000,
       maxBuffer: 1024 * 1024 * 5,
@@ -198,7 +195,7 @@ function extractJson(text: string): {
   return JSON.parse(raw);
 }
 
-async function listWorkspaceFiles(dir = workspaceRoot, depth = 0): Promise<string[]> {
+async function listWorkspaceFiles(effectiveRoot: string, dir = effectiveRoot, depth = 0): Promise<string[]> {
   if (depth > 3) return [];
 
   const ignore = new Set(['.git', 'node_modules', 'dist', 'dist-check', 'coverage', '.next', '.turbo']);
@@ -209,10 +206,10 @@ async function listWorkspaceFiles(dir = workspaceRoot, depth = 0): Promise<strin
     if (ignore.has(entry.name)) continue;
 
     const fullPath = path.join(dir, entry.name);
-    const relative = path.relative(workspaceRoot, fullPath).replace(/\\/g, '/');
+    const relative = path.relative(effectiveRoot, fullPath).replace(/\\/g, '/');
     if (entry.isDirectory()) {
       files.push(`${relative}/`);
-      files.push(...await listWorkspaceFiles(fullPath, depth + 1));
+      files.push(...await listWorkspaceFiles(effectiveRoot, fullPath, depth + 1));
     } else {
       files.push(relative);
     }
@@ -221,9 +218,9 @@ async function listWorkspaceFiles(dir = workspaceRoot, depth = 0): Promise<strin
   return files.slice(0, 180);
 }
 
-async function readOptionalFile(relativePath: string, maxLength = 8000): Promise<string> {
+async function readOptionalFile(relativePath: string, effectiveRoot: string, maxLength = 8000): Promise<string> {
   try {
-    const target = resolveWorkspacePath(relativePath);
+    const target = resolveWorkspacePath(relativePath, effectiveRoot);
     return await fs.readFile(target, 'utf-8').then((content) => content.slice(0, maxLength));
   } catch {
     return '';
@@ -232,9 +229,9 @@ async function readOptionalFile(relativePath: string, maxLength = 8000): Promise
 
 // ── Language detection from workspace files ────────────────────────────────
 
-async function detectWorkspaceLanguages(): Promise<string[]> {
+async function detectWorkspaceLanguages(effectiveRoot: string): Promise<string[]> {
   const counts: Record<string, number> = {};
-  const files = await listWorkspaceFiles();
+  const files = await listWorkspaceFiles(effectiveRoot);
 
   for (const file of files) {
     const ext = path.extname(file).toLowerCase();
@@ -257,14 +254,14 @@ export function getExtensionsForLanguage(language: string): Array<{ id: string; 
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
 
-async function buildAgentPrompt(task: string, context: AIContext): Promise<string> {
+async function buildAgentPrompt(task: string, context: AIContext, effectiveRoot: string): Promise<string> {
   const activeFile = context.currentFile
     ? `Active file: ${context.currentFile.path}\nLanguage: ${context.currentFile.language}\n\n${context.currentFile.content.slice(0, 12000)}`
     : 'No active file was provided.';
-  const workspaceFiles = await listWorkspaceFiles();
-  const packageJson = await readOptionalFile('package.json', 6000);
-  const serverPackageJson = await readOptionalFile('server/package.json', 4000);
-  const detectedLangs = await detectWorkspaceLanguages();
+  const workspaceFiles = await listWorkspaceFiles(effectiveRoot);
+  const packageJson = await readOptionalFile('package.json', effectiveRoot, 6000);
+  const serverPackageJson = await readOptionalFile('server/package.json', effectiveRoot, 4000);
+  const detectedLangs = await detectWorkspaceLanguages(effectiveRoot);
 
   return `You are an autonomous AI pair programmer inside a local web IDE powered by Gemini.
 
@@ -323,7 +320,17 @@ Use relative paths only. Do not include destructive commands. If a file must be 
 // ── Main agent runner ─────────────────────────────────────────────────────────
 
 export async function runPairProgrammerAgent(task: string, context: AIContext): Promise<AgentResult> {
-  const prompt = await buildAgentPrompt(task, context);
+  const baseRoot = process.env.WORKSPACE_ROOT
+    ? path.resolve(process.env.WORKSPACE_ROOT)
+    : path.resolve('./storage/workspaces');
+  
+  let effectiveRoot = baseRoot;
+  if (context.workspacePath) {
+    const cleanPath = context.workspacePath.replace(/^[/\\]+/, '');
+    effectiveRoot = path.resolve(baseRoot, cleanPath);
+  }
+
+  const prompt = await buildAgentPrompt(task, context, effectiveRoot);
   const aiText = await getChatCompletion(prompt, context, 8000);
   const parsed = extractJson(aiText);
   const actions = Array.isArray(parsed.actions) ? parsed.actions : [];
@@ -339,7 +346,7 @@ export async function runPairProgrammerAgent(task: string, context: AIContext): 
   for (const action of actions) {
     try {
       if (action.type === 'listFiles') {
-        const target = resolveWorkspacePath((action as { path?: string }).path || '.');
+        const target = resolveWorkspacePath((action as { path?: string }).path || '.', effectiveRoot);
         const entries = await fs.readdir(target, { withFileTypes: true });
         const output = entries
           .map((entry) => `${entry.isDirectory() ? 'dir ' : 'file'} ${entry.name}`)
@@ -348,26 +355,26 @@ export async function runPairProgrammerAgent(task: string, context: AIContext): 
 
       } else if (action.type === 'readFile') {
         const a = action as { path: string };
-        const target = resolveWorkspacePath(a.path);
+        const target = resolveWorkspacePath(a.path, effectiveRoot);
         const content = await fs.readFile(target, 'utf-8');
         result.actions.push({ type: action.type, target: a.path, success: true, output: content.slice(0, MAX_OUTPUT) });
 
       } else if (action.type === 'mkdir') {
         const a = action as { path: string };
-        const target = resolveWorkspacePath(a.path);
+        const target = resolveWorkspacePath(a.path, effectiveRoot);
         await fs.mkdir(target, { recursive: true });
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'Directory created' });
 
       } else if (action.type === 'writeFile') {
         const a = action as { path: string; content: string };
-        const target = resolveWorkspacePath(a.path);
+        const target = resolveWorkspacePath(a.path, effectiveRoot);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.writeFile(target, a.content || '', 'utf-8');
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File written' });
 
       } else if (action.type === 'appendFile') {
         const a = action as { path: string; content: string };
-        const target = resolveWorkspacePath(a.path);
+        const target = resolveWorkspacePath(a.path, effectiveRoot);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.appendFile(target, a.content || '', 'utf-8');
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File appended' });
@@ -377,16 +384,16 @@ export async function runPairProgrammerAgent(task: string, context: AIContext): 
         const packages = Array.isArray(a.packages) ? a.packages.filter(Boolean) : [];
         if (packages.length === 0) throw new Error('No packages were provided');
         const command = `npm install ${a.dev ? '-D ' : ''}${packages.join(' ')}`;
-        const output = await runWorkspaceCommand(command);
+        const output = await runWorkspaceCommand(command, effectiveRoot);
         result.actions.push({ type: action.type, target: packages.join(', '), success: true, output });
 
       } else if (action.type === 'runCommand') {
         const a = action as { command: string };
-        const output = await runWorkspaceCommand(a.command);
+        const output = await runWorkspaceCommand(a.command, effectiveRoot);
         result.actions.push({ type: action.type, target: a.command, success: true, output });
 
       } else if (action.type === 'detectLanguages') {
-        const langs = await detectWorkspaceLanguages();
+        const langs = await detectWorkspaceLanguages(effectiveRoot);
         result.detectedLanguages = langs;
         // Auto-generate extension recommendations for detected langs
         for (const lang of langs) {
@@ -447,7 +454,10 @@ export async function runPairProgrammerAgent(task: string, context: AIContext): 
  * Used by the AI pair panel on file open.
  */
 export async function autoDetectAndRecommendExtensions(language?: string): Promise<AgentResult['extensionRecommendations']> {
-  const langs = language ? [language.toLowerCase()] : await detectWorkspaceLanguages();
+  const baseRoot = process.env.WORKSPACE_ROOT
+    ? path.resolve(process.env.WORKSPACE_ROOT)
+    : path.resolve('./storage/workspaces');
+  const langs = language ? [language.toLowerCase()] : await detectWorkspaceLanguages(baseRoot);
   const recommendations: AgentResult['extensionRecommendations'] = [];
 
   for (const lang of langs.slice(0, 3)) {

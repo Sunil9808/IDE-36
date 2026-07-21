@@ -1,9 +1,9 @@
-import { X, Circle } from 'lucide-react';
+import { X, Circle, LayoutTemplate } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import FileTypeIcon from '../Icons/FileTypeIcon';
 
 export default function EditorTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab } = useEditorStore();
+  const { tabs, activeTabId, setActiveTab, closeTab, splitConfig, setSplitConfig } = useEditorStore();
 
   if (tabs.length === 0) return null;
 
@@ -68,6 +68,24 @@ export default function EditorTabs() {
           </div>
         );
       })}
+
+      {/* Live Preview Toggle for HTML */}
+      {tabs.find(t => t.id === activeTabId)?.language === 'html' && (
+        <div className="ml-auto flex items-center pr-3 h-full">
+          <button
+            onClick={() => setSplitConfig({ enabled: !splitConfig.enabled, direction: 'vertical' })}
+            className="flex items-center gap-1.5 px-3 h-6 rounded-md transition-colors text-[12px] font-semibold border"
+            style={{
+              color: splitConfig.enabled ? '#ffffff' : '#8a8a8a',
+              background: splitConfig.enabled ? '#22a6f2' : 'transparent',
+              borderColor: splitConfig.enabled ? '#22a6f2' : '#333333',
+            }}
+          >
+            <LayoutTemplate size={14} />
+            {splitConfig.enabled ? 'Close Preview' : 'Live Preview'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -48,7 +48,22 @@ export default function WorkspaceLayout() {
       window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search !== '?' ? cleanUrl.search : ''));
     }
 
-    setWorkspace(null);
+    setWorkspace({
+      id: `ide-default`,
+      name: 'IDE',
+      path: '/workspace',
+      createdAt: Date.now(),
+      lastOpenedAt: Date.now(),
+      recentFiles: [],
+      settings: {
+        theme: 'dark',
+        fontSize: 14,
+        tabSize: 2,
+        formatOnSave: true,
+        aiEnabled: true,
+        terminalShell: '/bin/bash',
+      },
+    });
     setFileTree([]);
 
     // Initialize extension runtime (themes, linting, formatting, commands)
@@ -198,15 +213,15 @@ export default function WorkspaceLayout() {
               onMouseDown={handleRightPanelMouseDown}
             />
             <div style={{ width: rightPanelWidth, flexShrink: 0, background: 'var(--color-sidebar)', borderLeft: '1px solid var(--color-border)', overflow: 'hidden' }}>
-              <AIChatPanel title="AI Pair Programmer" onClose={() => setRightPanelVisible(false)} />
+              <AIChatPanel title="Anywhere AI" onClose={() => setRightPanelVisible(false)} />
             </div>
           </>
         )}
 
         {!rightPanelVisible && (
           <button
-            title="Open AI Pair Programmer"
-            aria-label="Open AI Pair Programmer"
+            title="Open Anywhere AI"
+            aria-label="Open Anywhere AI"
             className="fixed right-3 top-1/2 z-40 flex h-28 w-11 -translate-y-1/2 flex-col items-center justify-center gap-2 rounded-xl border shadow-2xl transition-all hover:-translate-x-1"
             style={{
               background: 'linear-gradient(180deg, #183247 0%, #10202d 48%, #181818 100%)',

@@ -36,6 +36,7 @@ import { useAIStore } from '../../../store/aiStore';
 import { useEditorStore } from '../../../store/editorStore';
 import { useExtensionStore } from '../../../store/extensionStore';
 import { useUIStore } from '../../../store/uiStore';
+import { useWorkspaceStore } from '../../../store/workspaceStore';
 import { ChatMessage } from '../../../types/ai.types';
 import { v4 as uuidv4 } from '../../../utils/uuid';
 
@@ -98,7 +99,7 @@ interface AIChatPanelProps {
   onClose?: () => void;
 }
 
-export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatPanelProps) {
+export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPanelProps) {
   const [input, setInput] = useState('');
   const [agentTask, setAgentTask] = useState('');
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
@@ -127,6 +128,7 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
 
   const { autoInstallForLanguage, installed } = useExtensionStore();
   const addNotification = useUIStore((state) => state.addNotification);
+  const workspace = useWorkspaceStore((state) => state.workspace);
 
   // ── Auto-install extensions when active file language changes ──
   useEffect(() => {
@@ -144,7 +146,7 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
     setAutoExtNotice({ language: activeLanguage, names: names.length ? names : newIds });
     addNotification({
       type: 'success',
-      message: `AI Pair installed ${newIds.length} extension${newIds.length > 1 ? 's' : ''} for ${activeLanguage}`,
+      message: `Anywhere AI installed ${newIds.length} extension${newIds.length > 1 ? 's' : ''} for ${activeLanguage}`,
     });
   }, [activeLanguage, autoInstallForLanguage, installed, addNotification]);
 
@@ -193,7 +195,8 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
         language: activeTab.language,
         name: activeTab.fileName,
       } : undefined,
-      workspaceName: 'my-project',
+      workspaceName: workspace?.name || 'my-project',
+      workspacePath: workspace?.path,
     };
 
     // Add user message
@@ -497,7 +500,8 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
               language: activeTab.language,
               name: activeTab.fileName,
             } : undefined,
-            workspaceName: 'my-project',
+            workspaceName: workspace?.name || 'my-project',
+            workspacePath: workspace?.path,
           },
         }),
       });
@@ -601,7 +605,7 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
             </button>
             {onClose && (
               <button
-                title="Hide AI Pair Programmer"
+                title="Hide Anywhere AI"
                 onClick={onClose}
                 className="flex h-8 w-8 items-center justify-center rounded-md transition-all hover:bg-red-500/20"
                 style={{ color: '#c8c8c8' }}
@@ -667,7 +671,7 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
             <PackageCheck size={14} style={{ color: '#a78bfa', flexShrink: 0, marginTop: 1 }} />
             <div className="min-w-0 flex-1">
               <div className="text-[12px] font-semibold" style={{ color: '#c4b5fd' }}>
-                AI Pair installed extensions for {autoExtNotice.language}
+                Anywhere AI installed extensions for {autoExtNotice.language}
               </div>
               <div className="mt-1 text-[11px]" style={{ color: '#9177d4' }}>
                 {autoExtNotice.names.join(', ')}

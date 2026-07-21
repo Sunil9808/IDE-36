@@ -64,7 +64,7 @@ export default function SettingsEditor() {
           <ToggleSetting label="Activity bar" checked={activityBarVisible} onChange={setActivityBarVisible} />
           <ToggleSetting label="Primary side bar" checked={sidebarVisible} onChange={setSidebarVisible} />
           <ToggleSetting label="Bottom panel" checked={bottomPanelVisible} onChange={setBottomPanelVisible} />
-          <ToggleSetting label="AI pair programmer" checked={rightPanelVisible} onChange={setRightPanelVisible} />
+          <ToggleSetting label="Anywhere AI" checked={rightPanelVisible} onChange={setRightPanelVisible} />
           <ToggleSetting label="Status bar" checked={statusBarVisible} onChange={setStatusBarVisible} />
         </SettingsSection>
 
@@ -109,8 +109,8 @@ export default function SettingsEditor() {
           <ToggleSetting label="Format on paste" checked={settings.formatOnPaste} onChange={(value) => setEditorSetting('formatOnPaste', value)} />
         </SettingsSection>
 
-        <SettingsSection icon={Bot} title="AI Pair Programmer">
-          <ToggleSetting label="Show AI pair programmer panel" checked={rightPanelVisible} onChange={setRightPanelVisible} />
+        <SettingsSection icon={Bot} title="Anywhere AI">
+          <ToggleSetting label="Show Anywhere AI panel" checked={rightPanelVisible} onChange={setRightPanelVisible} />
           <ToggleSetting
             label="Inline AI completions (Tab)"
             checked={aiSettings.inlineCompletionsEnabled}

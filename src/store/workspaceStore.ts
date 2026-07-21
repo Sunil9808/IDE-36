@@ -14,7 +14,22 @@ interface WorkspaceStore {
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
-  workspace: null,
+  workspace: {
+    id: `ide-default`,
+    name: 'IDE',
+    path: '/workspace',
+    createdAt: Date.now(),
+    lastOpenedAt: Date.now(),
+    recentFiles: [],
+    settings: {
+      theme: 'dark',
+      fontSize: 14,
+      tabSize: 2,
+      formatOnSave: true,
+      aiEnabled: true,
+      terminalShell: '/bin/bash',
+    },
+  },
   recentWorkspaces: [],
   isLoading: false,
   error: null,

@@ -71,8 +71,8 @@ function createEmptyTab(): EditorTab {
 const initialTab = createEmptyTab();
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
-  tabs: [initialTab],
-  activeTabId: initialTab.id,
+  tabs: [],
+  activeTabId: null,
   splitConfig: { enabled: false, direction: 'horizontal', ratio: 0.5 },
   settings: defaultSettings,
 
@@ -101,8 +101,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       const idx = state.tabs.findIndex((t) => t.id === tabId);
       const newTabs = state.tabs.filter((t) => t.id !== tabId);
       if (newTabs.length === 0) {
-        const emptyTab = createEmptyTab();
-        return { tabs: [emptyTab], activeTabId: emptyTab.id };
+        return { tabs: [], activeTabId: null };
       }
       let newActiveId = state.activeTabId;
       if (state.activeTabId === tabId) {
@@ -113,8 +112,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   closeAllTabs: () => {
-    const emptyTab = createEmptyTab();
-    set({ tabs: [emptyTab], activeTabId: emptyTab.id });
+    set({ tabs: [], activeTabId: null });
   },
 
   setActiveTab: (tabId) => set({ activeTabId: tabId }),

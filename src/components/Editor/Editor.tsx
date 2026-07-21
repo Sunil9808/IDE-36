@@ -5,6 +5,7 @@ import MonacoEditor from './MonacoEditor';
 import ThunderRequestEditor from './ThunderRequestEditor';
 import ExtensionDetailEditor from './ExtensionDetailEditor';
 import SettingsEditor from './SettingsEditor';
+import HtmlPreview from './HtmlPreview';
 import { useEditorStore } from '../../store/editorStore';
 import { useFileStore } from '../../store/fileStore';
 import { useUIStore } from '../../store/uiStore';
@@ -134,7 +135,7 @@ export default function Editor() {
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
               {renderActiveEditor()}
             </div>
-            <div
+              <div
               className="min-h-0 min-w-0 flex-1 overflow-hidden border"
               style={{
                 borderColor: 'var(--color-border)',
@@ -142,9 +143,13 @@ export default function Editor() {
                 borderLeftWidth: splitConfig.direction === 'vertical' ? 1 : 0,
               }}
             >
-              <div className="flex h-full items-center justify-center text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
-                Split editor group
-              </div>
+              {activeTab?.language === 'html' ? (
+                <HtmlPreview content={activeTab.content} />
+              ) : (
+                <div className="flex h-full items-center justify-center text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
+                  Split editor group
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -301,7 +306,7 @@ function WelcomeEditor() {
           className="flex h-[52px] w-[180px] items-center gap-2 border-t px-3 text-[20px] italic"
           style={{ background: '#101112', borderColor: '#22a6f2', borderRight: '1px solid var(--color-border)', color: '#d8d8d8' }}
         >
-          <VSCodeLogo className="h-[27px] w-[27px] flex-shrink-0 not-italic" />
+          <AppLogo className="h-[27px] w-[27px] flex-shrink-0 not-italic" />
           <span>Welcome</span>
           <X size={24} className="ml-auto not-italic" />
         </div>
@@ -371,13 +376,23 @@ function WelcomeEditor() {
   );
 }
 
-function VSCodeLogo({ className = '' }: { className?: string }) {
+function AppLogo({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
-        fill="#22a6f2"
-        d="M17.9 2.2 8.9 10.4 3.5 6.3 1.6 7.4v9.2l1.9 1.1 5.4-4.1 9 8.2 4.5-1.8V4L17.9 2.2Zm.1 5.5v8.6l-5.8-4.3L18 7.7ZM4.3 9.5l3.1 2.5-3.1 2.5v-5Z"
+        fill="url(#logo-gradient)"
+        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+        stroke="url(#logo-gradient)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
+      <defs>
+        <linearGradient id="logo-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#3b82f6" />
+          <stop offset="1" stopColor="#8b5cf6" />
+        </linearGradient>
+      </defs>
     </svg>
   );
 }

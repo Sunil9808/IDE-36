@@ -34,6 +34,7 @@ export interface AIContext {
     language: string;
   }>;
   workspaceName?: string;
+  workspacePath?: string;
   recentErrors?: string[];
   terminalOutput?: string;
 }

@@ -815,7 +815,7 @@ export default function TitleBar() {
       { id: 'appearance-activitybar', label: 'Activity Bar', checked: activityBarVisible, action: () => setActivityBarVisible(!useUIStore.getState().activityBarVisible) },
       { id: 'appearance-sidebar', label: 'Primary Side Bar', checked: sidebarVisible, action: () => setSidebarVisible(!useUIStore.getState().sidebarVisible) },
       { id: 'appearance-panel', label: 'Toggle Panel', checked: bottomPanelVisible, action: () => setBottomPanelVisible(!useUIStore.getState().bottomPanelVisible) },
-    { id: 'appearance-secondary', label: 'AI Pair Programmer', checked: rightPanelVisible, action: () => setRightPanelVisible(!useUIStore.getState().rightPanelVisible) },
+    { id: 'appearance-secondary', label: 'Anywhere AI', checked: rightPanelVisible, action: () => setRightPanelVisible(!useUIStore.getState().rightPanelVisible) },
       { id: 'appearance-statusbar', label: 'Status Bar', checked: statusBarVisible, action: () => setStatusBarVisible(!useUIStore.getState().statusBarVisible) },
       { id: 'appearance-centered', label: 'Centered Layout', checked: centeredLayout, action: () => setCenteredLayout(!useUIStore.getState().centeredLayout) },
     ] },
@@ -831,7 +831,7 @@ export default function TitleBar() {
     { id: 'run', label: 'Run', shortcut: 'Ctrl+Shift+D', action: () => showSidebarPanel('debug') },
     { id: 'extensions', label: 'Extensions', shortcut: 'Ctrl+Shift+X', action: () => showSidebarPanel('extensions') },
     { id: 'sep-aux', separator: true },
-    { id: 'chat', label: 'AI Pair Programmer', shortcut: 'Ctrl+Alt+I', action: () => setRightPanelVisible(true) },
+    { id: 'chat', label: 'Anywhere AI', shortcut: 'Ctrl+Alt+I', action: () => setRightPanelVisible(true) },
     { id: 'browser', label: 'Browser', shortcut: 'Ctrl+Alt+/', action: openBrowserView },
     { id: 'sep-panel', separator: true },
     { id: 'problems', label: 'Problems', shortcut: 'Ctrl+Shift+M', action: () => showBottomPanel('problems') },
@@ -966,7 +966,7 @@ export default function TitleBar() {
 
       <div className="flex h-[52px] items-center px-3 text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
         <div className="flex w-[520px] items-center gap-5">
-          <VSCodeLogo className="h-[25px] w-[25px] flex-shrink-0" />
+          <AppLogo className="h-[25px] w-[25px] flex-shrink-0" />
 
           <div ref={menuRef} className="flex items-center gap-1">
             {menus.map((menu) => (
@@ -1243,7 +1243,7 @@ function CustomizeLayoutMenu({
       <div className="px-3 pb-2 text-[11px] uppercase tracking-wider font-semibold" style={{ color: 'var(--color-accent)' }}>Customize Layout</div>
       <LayoutMenuItem label="Activity Bar" checked={activityBarVisible} onClick={onToggleActivityBar} />
       <LayoutMenuItem label="Primary Side Bar" checked={sidebarVisible} onClick={onToggleSidebar} />
-      <LayoutMenuItem label="AI Pair Programmer" checked={rightPanelVisible} onClick={onToggleRightPanel} />
+      <LayoutMenuItem label="Anywhere AI" checked={rightPanelVisible} onClick={onToggleRightPanel} />
       <LayoutMenuItem label="Panel" checked={bottomPanelVisible} onClick={onTogglePanel} />
       <LayoutMenuItem label="Status Bar" checked={statusBarVisible} onClick={onToggleStatusBar} />
       <LayoutMenuItem label="Centered Layout" checked={centeredLayout} onClick={onToggleCentered} />
@@ -1439,13 +1439,23 @@ function buildClonedRepositoryTree(repoName: string): FileNode[] {
   ];
 }
 
-function VSCodeLogo({ className = '' }: { className?: string }) {
+function AppLogo({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
-        fill="#22a6f2"
-        d="M17.9 2.2 8.9 10.4 3.5 6.3 1.6 7.4v9.2l1.9 1.1 5.4-4.1 9 8.2 4.5-1.8V4L17.9 2.2Zm.1 5.5v8.6l-5.8-4.3L18 7.7ZM4.3 9.5l3.1 2.5-3.1 2.5v-5Z"
+        fill="url(#logo-gradient)"
+        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+        stroke="url(#logo-gradient)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
+      <defs>
+        <linearGradient id="logo-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#3b82f6" />
+          <stop offset="1" stopColor="#8b5cf6" />
+        </linearGradient>
+      </defs>
     </svg>
   );
 }

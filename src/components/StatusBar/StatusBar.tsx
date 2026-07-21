@@ -81,7 +81,7 @@ export default function StatusBar() {
           </span>
         </StatusItem>
 
-        <StatusItem title="Open AI Pair Programmer" onClick={() => setRightPanelVisible(true)}>
+        <StatusItem title="Open Anywhere AI" onClick={() => setRightPanelVisible(true)}>
           <Bot size={13} />
           <span>AI</span>
         </StatusItem>

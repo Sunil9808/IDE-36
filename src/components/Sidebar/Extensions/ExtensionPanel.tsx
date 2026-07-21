@@ -590,7 +590,7 @@ function ExtensionRow({
           {installed && item.aiAutoInstalled && (
             <span
               style={{ fontSize: 10, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', padding: '1px 6px', borderRadius: 999, border: '1px solid rgba(167,139,250,0.2)', display: 'inline-flex', alignItems: 'center', gap: 3 }}
-              title="Automatically installed by AI Pair"
+              title="Automatically installed by Anywhere AI"
             >
               <Zap size={9} />AI
             </span>
