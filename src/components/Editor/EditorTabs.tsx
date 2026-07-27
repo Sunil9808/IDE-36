@@ -8,60 +8,44 @@ export default function EditorTabs() {
   if (tabs.length === 0) return null;
 
   return (
-    <div
-      className="flex items-end overflow-x-auto flex-shrink-0 no-select"
-      style={{
-        background: 'var(--color-tab)',
-        borderBottom: '1px solid var(--color-border)',
-        height: 35,
-        minHeight: 35,
-      }}
-    >
+    <div className="editor-tabs-bar no-select">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
         return (
           <div
             key={tab.id}
-            className="flex items-center gap-1.5 px-3 h-full cursor-pointer group flex-shrink-0 relative"
-            style={{
-              background: isActive ? 'var(--color-tabActive)' : 'var(--color-tab)',
-              color: isActive ? 'var(--color-text)' : 'var(--color-textMuted)',
-              borderRight: '1px solid var(--color-border)',
-              borderTop: isActive ? '1px solid var(--color-accent)' : '1px solid transparent',
-              maxWidth: 200,
-              minWidth: 100,
-            }}
+            role="tab"
+            aria-selected={isActive}
+            className={`editor-tab${isActive ? ' active' : ''} group`}
             onClick={() => setActiveTab(tab.id)}
           >
             {/* File icon */}
-            <FileTypeIcon filename={tab.fileName} size={14} className="flex-shrink-0" />
+            <FileTypeIcon filename={tab.fileName} size={14} className="flex-shrink-0 opacity-80" />
 
             {/* File name */}
-            <span className="text-xs truncate flex-1">
+            <span className="truncate flex-1" style={{ fontSize: 12.5 }}>
               {tab.fileName}
             </span>
 
-            {/* Dirty indicator / close button */}
-            <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+            {/* Dirty dot / close button */}
+            <div className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
               {tab.isDirty ? (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(tab.id);
-                  }}
-                  className="w-4 h-4 flex items-center justify-center rounded-sm hover:bg-white/20 transition-colors"
+                  aria-label={`Close ${tab.fileName} (unsaved)`}
+                  className="editor-tab-close"
+                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  title="Unsaved changes — click to close"
                 >
-                  <Circle size={8} fill="currentColor" className="opacity-80" />
+                  <span className="editor-tab-dirty" />
                 </button>
               ) : (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(tab.id);
-                  }}
-                  className="w-4 h-4 flex items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 hover:bg-white/20 transition-all"
+                  aria-label={`Close ${tab.fileName}`}
+                  className="editor-tab-close"
+                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  title="Close"
                 >
-                  <X size={12} />
+                  <X size={11} strokeWidth={2} />
                 </button>
               )}
             </div>
@@ -69,19 +53,23 @@ export default function EditorTabs() {
         );
       })}
 
-      {/* Live Preview Toggle for HTML */}
+      {/* Live Preview toggle — HTML only */}
       {tabs.find(t => t.id === activeTabId)?.language === 'html' && (
-        <div className="ml-auto flex items-center pr-3 h-full">
+        <div className="ml-auto flex items-center pr-3 h-full flex-shrink-0">
           <button
+            aria-label="Toggle live preview"
             onClick={() => setSplitConfig({ enabled: !splitConfig.enabled, direction: 'vertical' })}
-            className="flex items-center gap-1.5 px-3 h-6 rounded-md transition-colors text-[12px] font-semibold border"
+            className="ide-btn ide-btn-secondary"
             style={{
-              color: splitConfig.enabled ? '#ffffff' : '#8a8a8a',
-              background: splitConfig.enabled ? '#22a6f2' : 'transparent',
-              borderColor: splitConfig.enabled ? '#22a6f2' : '#333333',
+              height: 24,
+              fontSize: 12,
+              padding: '0 10px',
+              background: splitConfig.enabled ? 'var(--accent)' : 'transparent',
+              color: splitConfig.enabled ? 'white' : 'var(--text-1)',
+              borderColor: splitConfig.enabled ? 'var(--accent)' : 'var(--border-1)',
             }}
           >
-            <LayoutTemplate size={14} />
+            <LayoutTemplate size={13} />
             {splitConfig.enabled ? 'Close Preview' : 'Live Preview'}
           </button>
         </div>

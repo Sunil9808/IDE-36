@@ -1,18 +1,27 @@
 import { Request, Response, NextFunction } from 'express';
 import { streamChatResponse, getChatCompletion, getInlineCompletion, AIContext } from '../services/ai/aiService';
 import { runPairProgrammerAgent, autoDetectAndRecommendExtensions } from '../services/ai/agentService';
+import { processNLU, ConversationEntry } from '../services/ai/nluService';
 
 export const aiController = {
   async chat(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { prompt, context = {} } = req.body as { prompt: string; context: AIContext };
+      const { prompt, context = {}, conversationHistory = [] } = req.body as {
+        prompt: string;
+        context: AIContext;
+        conversationHistory: ConversationEntry[];
+      };
 
       if (!prompt || typeof prompt !== 'string') {
         res.status(400).json({ error: 'prompt is required and must be a string' });
         return;
       }
 
-      await streamChatResponse(prompt, context, res);
+      // NLU preprocessing — clean and correct the prompt
+      const nluResult = processNLU(prompt, context, conversationHistory);
+      const cleanedPrompt = nluResult.correctedInput || prompt;
+
+      await streamChatResponse(cleanedPrompt, context, res, conversationHistory);
     } catch (error) {
       next(error);
     }
@@ -20,14 +29,46 @@ export const aiController = {
 
   async agent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { task, context = {} } = req.body as { task: string; context: AIContext };
+      const { task, context = {}, conversationHistory = [] } = req.body as {
+        task: string;
+        context: AIContext;
+        conversationHistory: ConversationEntry[];
+      };
 
       if (!task || typeof task !== 'string') {
         res.status(400).json({ error: 'task is required and must be a string' });
         return;
       }
 
-      const result = await runPairProgrammerAgent(task, context);
+      // Run NLU pipeline (local, <5ms)
+      const nluResult = processNLU(task, context, conversationHistory);
+
+      // Clarification — return question without executing any actions
+      if (nluResult.needsClarification) {
+        res.json({
+          summary: nluResult.clarificationMessage || 'Could you provide more details?',
+          plan: [],
+          actions: [],
+          nextSteps: ['Please provide more details so I can help you better.'],
+          nluResult,
+        });
+        return;
+      }
+
+      // Destructive action confirmation — ask before proceeding
+      if (nluResult.isDestructive) {
+        res.json({
+          summary: `⚠️ This will ${nluResult.intent} files. Please confirm by saying "yes" or "confirm".`,
+          plan: nluResult.executionPlan,
+          actions: [],
+          nextSteps: ['Reply "yes" to proceed, or rephrase your request.'],
+          nluResult,
+        });
+        return;
+      }
+
+      const result = await runPairProgrammerAgent(task, context, conversationHistory, nluResult);
+      (result as any).nluResult = nluResult;
       res.json(result);
     } catch (error) {
       next(error);
@@ -91,6 +132,43 @@ export const aiController = {
 
       const prompt = `Refactor this ${language} code: ${instruction}\n\n\`\`\`${language}\n${code}\n\`\`\`\n\nProvide refactored code with explanations of all changes.`;
       await streamChatResponse(prompt, context, res);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async inlineEdit(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { code, instruction, language = 'code', prefix = '', suffix = '', context = {} } = req.body as {
+        code: string;
+        instruction: string;
+        language: string;
+        prefix?: string;
+        suffix?: string;
+        context?: AIContext;
+      };
+
+      const prompt = `You are an inline code editing engine like Cursor Cmd+K.
+Modify the following ${language} code according to the instruction.
+Return ONLY the modified code block inside \`\`\`${language} \`\`\` fences. Do NOT include any explanations, introductory text, or markdown outside the code block.
+
+Instruction: ${instruction}
+
+${prefix ? `Code BEFORE selection:\n${prefix.slice(-1500)}\n\n` : ''}Selected code to modify:
+\`\`\`${language}
+${code}
+\`\`\`
+${suffix ? `\nCode AFTER selection:\n${suffix.slice(0, 1500)}` : ''}`;
+
+      const raw = await getChatCompletion(prompt, context, 4000);
+      let cleaned = raw.trim();
+      const match = cleaned.match(/```[\w]*\s*([\s\S]*?)```/);
+      if (match) {
+        cleaned = match[1].trim();
+      } else {
+        cleaned = cleaned.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+      }
+      res.json({ code: cleaned });
     } catch (error) {
       next(error);
     }

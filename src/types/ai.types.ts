@@ -102,3 +102,59 @@ export interface AISettings {
   inlineCompletionsEnabled: boolean;
   inlineCompletionsDelay: number;
 }
+
+// ── NLU Types ─────────────────────────────────────────────────────────────────
+
+export type NLUIntent =
+  | 'create' | 'edit' | 'delete' | 'rename'
+  | 'explain' | 'refactor' | 'debug' | 'optimize'
+  | 'generate' | 'search' | 'build' | 'run'
+  | 'install' | 'test' | 'deploy' | 'review'
+  | 'convert' | 'translate' | 'document'
+  | 'question' | 'unknown';
+
+export interface NLUEntities {
+  frameworks: string[];
+  languages: string[];
+  files: string[];
+  folders: string[];
+  features: string[];
+  packages: string[];
+}
+
+export interface NLUResult {
+  originalInput: string;
+  cleanedInput: string;
+  correctedInput: string;
+  intent: NLUIntent;
+  confidence: number;
+  entities: NLUEntities;
+  needsClarification: boolean;
+  clarificationMessage?: string;
+  executionPlan: string[];
+  isDestructive: boolean;
+}
+
+export interface ConversationEntry {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+export interface SessionContext {
+  currentTask?: string;
+  framework?: string;
+  language?: string;
+  projectName?: string;
+  recentActions: string[];
+}
+
+export interface AgentRunResult {
+  summary: string;
+  plan: string[];
+  actions: Array<{ type: string; target: string; success: boolean; output: string }>;
+  nextSteps: string[];
+  nluResult?: NLUResult;
+  extensionRecommendations?: Array<{ extensionId: string; language: string; reason: string }>;
+  detectedLanguages?: string[];
+}

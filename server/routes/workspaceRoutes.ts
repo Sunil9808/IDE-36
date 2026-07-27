@@ -2,12 +2,24 @@ import { Router, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
+import { getWorkspaceRoot } from '../utils/workspaceRoot';
 
 const router = Router();
 
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT
-  ? path.resolve(process.env.WORKSPACE_ROOT)
-  : path.resolve('./storage/workspaces');
+const WORKSPACE_ROOT = getWorkspaceRoot();
+
+router.get('/current', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    await fs.mkdir(WORKSPACE_ROOT, { recursive: true });
+    res.json({
+      id: Buffer.from(WORKSPACE_ROOT).toString('base64').slice(0, 16),
+      name: path.basename(WORKSPACE_ROOT),
+      path: WORKSPACE_ROOT,
+      createdAt: Date.now(),
+      lastOpenedAt: Date.now(),
+    });
+  } catch (error) { next(error); }
+});
 
 router.get('/list', async (req: Request, res: Response, next: NextFunction) => {
   try {

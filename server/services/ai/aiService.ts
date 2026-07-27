@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { GoogleGenerativeAI, GenerativeModel, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { Response } from 'express';
+import { ConversationEntry } from './nluService';
 
 let aiClient: OpenAI | null = null;
 let geminiClient: GoogleGenerativeAI | null = null;
@@ -51,7 +52,7 @@ function getAIClient(): OpenAI {
       baseURL: isSambaNova
         ? process.env.SAMBANOVA_BASE_URL || 'https://api.sambanova.ai/v1'
         : process.env.OPENAI_BASE_URL,
-      timeout: 30000, // 30 second timeout to avoid hanging on slow models
+      timeout: parseInt(process.env.AI_TIMEOUT_MS || '300000', 10), // 5 minute timeout to allow generating large projects/websites
     });
   }
   return aiClient;
@@ -84,7 +85,7 @@ export interface AIContext {
   terminalOutput?: string;
 }
 
-function buildSystemPrompt(context: AIContext): string {
+function buildSystemPrompt(context: AIContext, conversationHistory: ConversationEntry[] = []): string {
   let systemPrompt = `You are an expert AI programming assistant integrated into AI Web IDE, a VS Code-style web IDE.
 
 Your capabilities:
@@ -129,13 +130,21 @@ Current workspace context:`;
     systemPrompt += `\n\nRecent terminal output:\n${context.terminalOutput}`;
   }
 
+  if (conversationHistory.length > 0) {
+    const recentHistory = conversationHistory.slice(-10);
+    systemPrompt += '\n\nConversation history:';
+    for (const entry of recentHistory) {
+      systemPrompt += `\n[${entry.role}]: ${entry.content.slice(0, 1500)}`;
+    }
+  }
+
   return systemPrompt;
 }
 
 // ── Gemini streaming ──────────────────────────────────────────────────────────
 
-async function streamGeminiResponse(prompt: string, context: AIContext, res: Response): Promise<void> {
-  const systemPrompt = buildSystemPrompt(context);
+async function streamGeminiResponse(prompt: string, context: AIContext, res: Response, conversationHistory: ConversationEntry[] = []): Promise<void> {
+  const systemPrompt = buildSystemPrompt(context, conversationHistory);
   const model = getGeminiClient();
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -194,15 +203,15 @@ async function getGeminiCompletion(prompt: string, context: AIContext, maxTokens
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function streamChatResponse(prompt: string, context: AIContext, res: Response): Promise<void> {
+export async function streamChatResponse(prompt: string, context: AIContext, res: Response, conversationHistory: ConversationEntry[] = []): Promise<void> {
   const provider = getAIProvider();
 
   if (provider === 'gemini') {
-    return streamGeminiResponse(prompt, context, res);
+    return streamGeminiResponse(prompt, context, res, conversationHistory);
   }
 
   // OpenAI / SambaNova path
-  const systemPrompt = buildSystemPrompt(context);
+  const systemPrompt = buildSystemPrompt(context, conversationHistory);
   const model = getAIModel();
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -219,7 +228,7 @@ export async function streamChatResponse(prompt: string, context: AIContext, res
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
       ],
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0.7,
       stream: true,
     });

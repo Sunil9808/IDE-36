@@ -1,7 +1,9 @@
-import { AlertTriangle, Bell, Bot, Puzzle, Radio, Rocket, XCircle } from 'lucide-react';
+import { AlertTriangle, Bell, Bot, GitBranch, Puzzle, Radio, Rocket, XCircle } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useExtensionStore } from '../../store/extensionStore';
 import { useEditorStore } from '../../store/editorStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
+import { useSourceControlStore } from '../../store/sourceControlStore';
 import { getActiveExtensionIds } from '../../services/extensionRuntime';
 
 export default function StatusBar() {
@@ -13,9 +15,11 @@ export default function StatusBar() {
     setSidebarVisible,
     addNotification,
   } = useUIStore();
-  const installedExtensions = useExtensionStore((state) => state.installed);
-  const activeTabLanguage = useEditorStore((state) => state.getActiveTab()?.language ?? '');
+  const installedExtensions = useExtensionStore((s) => s.installed);
+  const activeTabLanguage = useEditorStore((s) => s.getActiveTab()?.language ?? '');
   const activeExtCount = getActiveExtensionIds().size;
+  const workspace = useWorkspaceStore((s) => s.workspace);
+  const branch = useSourceControlStore((s) => s.branch);
 
   const showPanel = (panel: 'terminal' | 'output' | 'problems' | 'debug' | 'ports') => {
     setActiveBottomPanel(panel);
@@ -33,90 +37,106 @@ export default function StatusBar() {
     setSidebarVisible(true);
   };
 
-
   return (
-    <div
-      className="flex h-[26px] flex-shrink-0 items-center justify-between border-t px-2 no-select"
-      style={{
-        background: 'var(--color-statusBar)',
-        borderColor: 'var(--color-border)',
-        color: '#9a9a9a',
-        fontSize: 12,
-        fontFamily: "'Inter', system-ui, sans-serif",
-      }}
-    >
+    <div className="status-bar no-select">
       {/* Left section */}
-      <div className="flex h-full items-center gap-1">
-        <StatusItem title="Open Explorer" onClick={() => { setActiveSidebarPanel('explorer'); setSidebarVisible(true); }}>
-          <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.5px', color: 'var(--color-accent)' }}>&gt;&lt;</span>
-        </StatusItem>
-        <StatusItem title="Run project" onClick={() => void runDevServer()}>
-          <Rocket size={13} />
+      <div className="status-bar-left">
+        {/* Branch indicator — accent colored */}
+        <button
+          title="Source Control"
+          aria-label="Source Control"
+          className="status-btn status-branch"
+          onClick={() => { setActiveSidebarPanel('git'); setSidebarVisible(true); }}
+        >
+          <GitBranch size={12} strokeWidth={2} />
+          <span>{branch || (workspace?.name ? 'main' : 'No repo')}</span>
+        </button>
+
+        <button
+          title="Run project (npm run dev)"
+          aria-label="Run project"
+          className="status-btn"
+          onClick={() => void runDevServer()}
+        >
+          <Rocket size={12} />
           <span>Run</span>
-        </StatusItem>
-        <StatusItem title="Problems" onClick={() => showPanel('problems')}>
+        </button>
+
+        <button
+          title="Problems"
+          aria-label="Problems panel"
+          className="status-btn"
+          onClick={() => showPanel('problems')}
+        >
           <XCircle size={12} />
           <span>0</span>
           <AlertTriangle size={12} />
           <span>0</span>
-        </StatusItem>
+        </button>
       </div>
 
       {/* Right section */}
-      <div className="flex h-full items-center gap-1">
-        {/* Language indicator */}
+      <div className="status-bar-right">
+        {/* Language mode */}
         {activeTabLanguage && (
-          <StatusItem title="Language mode" onClick={() => addNotification({ type: 'info', message: `Active language: ${activeTabLanguage}` })}>
+          <button
+            title={`Language mode: ${activeTabLanguage}`}
+            aria-label="Language mode"
+            className="status-btn"
+            onClick={() => addNotification({ type: 'info', message: `Active language: ${activeTabLanguage}` })}
+          >
             <span style={{ textTransform: 'capitalize' }}>{activeTabLanguage}</span>
-          </StatusItem>
+          </button>
         )}
 
-        {/* Extensions indicator */}
-        <StatusItem title="Manage extensions" onClick={openExtensions}>
+        {/* Extensions */}
+        <button
+          title="Manage extensions"
+          aria-label="Manage extensions"
+          className="status-btn"
+          onClick={openExtensions}
+        >
           <Puzzle size={12} />
           <span>
             {installedExtensions.length > 0
               ? `${activeExtCount} active`
               : 'Extensions'}
           </span>
-        </StatusItem>
+        </button>
 
-        <StatusItem title="Open Anywhere AI" onClick={() => setRightPanelVisible(true)}>
-          <Bot size={13} />
+        {/* AI */}
+        <button
+          title="Open Anywhere AI"
+          aria-label="Open Anywhere AI"
+          className="status-btn"
+          onClick={() => setRightPanelVisible(true)}
+          style={{ color: 'var(--accent)', fontWeight: 600 }}
+        >
+          <Bot size={12} />
           <span>AI</span>
-        </StatusItem>
+        </button>
 
-
-        <StatusItem title="Open Ports" onClick={() => showPanel('ports')}>
+        {/* Ports */}
+        <button
+          title="Open Ports"
+          aria-label="Open Ports"
+          className="status-btn"
+          onClick={() => showPanel('ports')}
+        >
           <Radio size={12} />
           <span>Go Live</span>
-        </StatusItem>
+        </button>
 
-        <StatusItem title="Notifications" onClick={() => addNotification({ type: 'info', message: 'No new notifications' })}>
+        {/* Notifications */}
+        <button
+          title="Notifications"
+          aria-label="Notifications"
+          className="status-btn"
+          onClick={() => addNotification({ type: 'info', message: 'No new notifications' })}
+        >
           <Bell size={12} />
-        </StatusItem>
+        </button>
       </div>
     </div>
-  );
-}
-
-function StatusItem({
-  children,
-  onClick,
-  title,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  title?: string;
-}) {
-  return (
-    <button
-      title={title}
-      onClick={onClick}
-      className="flex h-full items-center gap-1 rounded px-2 hover:bg-white/10 transition-colors"
-      style={{ fontSize: 12, fontFamily: "'Inter', system-ui, sans-serif" }}
-    >
-      {children}
-    </button>
   );
 }

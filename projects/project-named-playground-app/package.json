@@ -1,0 +1,9 @@
+{
+  "name": "project-named-playground-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --workspace server",
+    "start": "npm start --workspace server"
+  }
+}

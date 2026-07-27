@@ -4,6 +4,22 @@ import { Workspace } from '../types/workspace.types';
 const BASE_URL = '/api/workspace';
 
 export const workspaceService = {
+  async getCurrentWorkspace(): Promise<Workspace> {
+    const { data } = await axios.get(`${BASE_URL}/current`);
+    return {
+      ...data,
+      recentFiles: data.recentFiles || [],
+      settings: data.settings || {
+        theme: 'dark',
+        fontSize: 14,
+        tabSize: 2,
+        formatOnSave: true,
+        aiEnabled: true,
+        terminalShell: '/bin/bash',
+      },
+    };
+  },
+
   async createWorkspace(name: string): Promise<Workspace> {
     const { data } = await axios.post(`${BASE_URL}/create`, { name });
     return data;

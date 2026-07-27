@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { ChatMessage, AIContext, AISettings } from '../types/ai.types';
+import { ChatMessage, AIContext, AISettings, SessionContext } from '../types/ai.types';
 
 interface AIStore {
   messages: ChatMessage[];
   isStreaming: boolean;
   isLoading: boolean;
   context: AIContext;
+  sessionContext: SessionContext;
   settings: AISettings;
   error: string | null;
   
@@ -17,6 +18,7 @@ interface AIStore {
   setStreaming: (streaming: boolean) => void;
   setLoading: (loading: boolean) => void;
   updateContext: (context: Partial<AIContext>) => void;
+  updateSessionContext: (context: Partial<SessionContext>) => void;
   updateSettings: (settings: Partial<AISettings>) => void;
   setError: (error: string | null) => void;
 }
@@ -34,11 +36,16 @@ const defaultSettings: AISettings = {
   inlineCompletionsDelay: 400,
 };
 
+const defaultSessionContext: SessionContext = {
+  recentActions: []
+};
+
 export const useAIStore = create<AIStore>((set) => ({
   messages: [],
   isStreaming: false,
   isLoading: false,
   context: {},
+  sessionContext: defaultSessionContext,
   settings: defaultSettings,
   error: null,
 
@@ -95,6 +102,10 @@ export const useAIStore = create<AIStore>((set) => ({
 
   updateContext: (context) => {
     set((state) => ({ context: { ...state.context, ...context } }));
+  },
+
+  updateSessionContext: (context) => {
+    set((state) => ({ sessionContext: { ...state.sessionContext, ...context } }));
   },
 
   updateSettings: (settings) => {

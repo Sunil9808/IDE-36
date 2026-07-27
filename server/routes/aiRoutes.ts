@@ -23,6 +23,7 @@ router.post('/explain', aiController.explain);
 router.post('/generate', aiController.generate);
 router.post('/debug', aiController.debug);
 router.post('/refactor', aiController.refactor);
+router.post('/inline-edit', aiController.inlineEdit);
 router.post('/review', aiController.review);
 router.post('/test', aiController.generateTests);
 router.post('/document', aiController.generateDocs);

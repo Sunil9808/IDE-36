@@ -1365,6 +1365,7 @@ async function handleSave(
   try {
     await fileService.writeFile(filePath, content);
     useEditorStore.getState().saveTab(tabId);
+    window.dispatchEvent(new CustomEvent('ai-web-ide:file-saved', { detail: { path: filePath } }));
   } catch {
     // Server might not be available; just mark saved locally
     useEditorStore.getState().saveTab(tabId);

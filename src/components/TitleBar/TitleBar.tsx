@@ -1103,51 +1103,36 @@ export default function TitleBar() {
           <button
             title="Minimize"
             aria-label="Minimize window"
-            className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-white/10"
-            style={{ color: 'var(--color-textMuted)' }}
-            onClick={() => {
-              // Attempt native minimize via blur; in PWA/Electron this closes the focus
-              notify('Window minimized', 'info');
-              window.blur();
-            }}
+            className="window-btn"
+            onClick={() => { notify('Window minimized', 'info'); window.blur(); }}
           >
-            <Minus size={21} />
+            <Minus size={18} />
           </button>
           <button
             title={isMaximized ? 'Restore' : 'Maximize'}
             aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
-            className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-white/10"
-            style={{ color: 'var(--color-textMuted)' }}
+            className="window-btn"
             onClick={async () => {
               try {
-                if (!document.fullscreenElement) {
-                  await document.documentElement.requestFullscreen();
-                } else {
-                  await document.exitFullscreen();
-                }
-              } catch {
-                notify('Fullscreen not available in this browser', 'warning');
-              }
+                if (!document.fullscreenElement) { await document.documentElement.requestFullscreen(); }
+                else { await document.exitFullscreen(); }
+              } catch { notify('Fullscreen not available in this browser', 'warning'); }
             }}
           >
-            {isMaximized ? <Maximize2 size={20} /> : <Square size={20} />}
+            {isMaximized ? <Maximize2 size={16} /> : <Square size={16} />}
           </button>
           <button
             title="Close"
             aria-label="Close window"
-            className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-red-500 hover:text-white"
-            style={{ color: 'var(--color-textMuted)' }}
+            className="window-btn window-btn-close"
             onClick={() => {
               const dirty = tabs.some((t) => t.isDirty);
-              if (dirty) {
-                const ok = window.confirm('You have unsaved changes. Close anyway?');
-                if (!ok) return;
-              }
+              if (dirty) { const ok = window.confirm('You have unsaved changes. Close anyway?'); if (!ok) return; }
               window.close();
               notify('Your browser may block closing tabs it did not open', 'warning');
             }}
           >
-            <X size={22} />
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -1159,17 +1144,14 @@ export default function TitleBar() {
 
 function SimpleDropdown({ items }: { items: MenuSubItem[] }) {
   return (
-    <div
-      className="absolute left-0 top-full z-50 min-w-56 rounded-lg py-1 text-[13px] shadow-2xl"
-      style={{ background: '#150f2a', border: '1px solid rgba(167,139,250,0.2)', color: 'var(--color-text)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
-    >
+    <div className="ide-dropdown absolute left-0 top-full min-w-[220px] text-[13px]">
       {items.map((item, index) =>
         item.separator ? (
-          <div key={index} className="my-1 border-t" style={{ borderColor: 'var(--color-border)' }} />
+          <div key={index} className="ide-menu-sep" />
         ) : (
-          <button key={index} className="flex w-full items-center justify-between gap-8 px-4 py-1.5 text-left hover:bg-white/10">
+          <button key={index} className="ide-menu-item">
             <span>{item.label}</span>
-            {item.shortcut && <span style={{ color: 'var(--color-textMuted)' }}>{item.shortcut}</span>}
+            {item.shortcut && <span className="ide-menu-item-shortcut">{item.shortcut}</span>}
           </button>
         )
       )}
@@ -1192,8 +1174,8 @@ function TitleIconButton({
     <button
       title={title}
       onClick={onClick}
-      className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-white/10"
-      style={{ color: active ? '#ffffff' : 'var(--color-textMuted)', background: active ? 'rgba(255,255,255,0.08)' : 'transparent' }}
+      className={`title-bar-icon-btn${active ? ' active' : ''}`}
+      aria-pressed={active}
     >
       {children}
     </button>
@@ -1236,19 +1218,16 @@ function CustomizeLayoutMenu({
   onSplitDown: () => void;
 }) {
   return (
-    <div
-      className="absolute right-0 top-full z-50 mt-2 w-[322px] rounded-xl py-2 text-[13px] shadow-2xl"
-      style={{ background: '#150f2a', border: '1px solid rgba(167,139,250,0.2)', color: 'var(--color-text)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
-    >
-      <div className="px-3 pb-2 text-[11px] uppercase tracking-wider font-semibold" style={{ color: 'var(--color-accent)' }}>Customize Layout</div>
+    <div className="ide-dropdown absolute right-0 top-full mt-2 w-[320px] text-[13px]">
+      <div className="px-3 pb-2 pt-1 text-[10.5px] uppercase tracking-widest font-semibold" style={{ color: 'var(--accent)' }}>Customize Layout</div>
       <LayoutMenuItem label="Activity Bar" checked={activityBarVisible} onClick={onToggleActivityBar} />
       <LayoutMenuItem label="Primary Side Bar" checked={sidebarVisible} onClick={onToggleSidebar} />
       <LayoutMenuItem label="Anywhere AI" checked={rightPanelVisible} onClick={onToggleRightPanel} />
       <LayoutMenuItem label="Panel" checked={bottomPanelVisible} onClick={onTogglePanel} />
       <LayoutMenuItem label="Status Bar" checked={statusBarVisible} onClick={onToggleStatusBar} />
       <LayoutMenuItem label="Centered Layout" checked={centeredLayout} onClick={onToggleCentered} />
-      <div className="my-2 h-px" style={{ background: 'rgba(167,139,250,0.15)' }} />
-      <div className="px-3 pb-1 text-[11px] uppercase tracking-wider font-semibold" style={{ color: 'var(--color-accent)' }}>Editor Layout</div>
+      <div className="ide-menu-sep" />
+      <div className="px-3 pb-1 text-[10.5px] uppercase tracking-widest font-semibold" style={{ color: 'var(--accent)' }}>Editor Layout</div>
       <LayoutMenuItem label="Single" checked={!splitConfig.enabled} onClick={onSingleEditor} />
       <LayoutMenuItem label="Split Right" checked={splitConfig.enabled && splitConfig.direction === 'vertical'} onClick={onSplitRight} />
       <LayoutMenuItem label="Split Down" checked={splitConfig.enabled && splitConfig.direction === 'horizontal'} onClick={onSplitDown} />

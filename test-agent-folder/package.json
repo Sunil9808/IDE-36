@@ -1,0 +1,9 @@
+{
+  "name": "test-agent-folder",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node index.js",
+    "start": "node index.js"
+  }
+}

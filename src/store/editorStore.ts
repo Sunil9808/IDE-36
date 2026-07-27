@@ -14,6 +14,7 @@ interface EditorStore {
   setActiveTab: (tabId: string) => void;
   updateTabFile: (tabId: string, file: Partial<Pick<EditorTab, 'fileId' | 'filePath' | 'fileName' | 'language'>>) => void;
   updateTabContent: (tabId: string, content: string) => void;
+  replaceTabContent: (tabId: string, content: string) => void;
   markTabDirty: (tabId: string, isDirty: boolean) => void;
   saveTab: (tabId: string) => void;
   
@@ -127,6 +128,14 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set((state) => ({
       tabs: state.tabs.map((t) =>
         t.id === tabId ? { ...t, content, isDirty: true } : t
+      ),
+    }));
+  },
+
+  replaceTabContent: (tabId, content) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === tabId ? { ...t, content, isDirty: false } : t
       ),
     }));
   },

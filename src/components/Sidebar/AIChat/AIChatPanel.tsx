@@ -37,8 +37,11 @@ import { useEditorStore } from '../../../store/editorStore';
 import { useExtensionStore } from '../../../store/extensionStore';
 import { useUIStore } from '../../../store/uiStore';
 import { useWorkspaceStore } from '../../../store/workspaceStore';
-import { ChatMessage } from '../../../types/ai.types';
+import { useFileStore } from '../../../store/fileStore';
+import { ChatMessage, AgentRunResult } from '../../../types/ai.types';
 import { v4 as uuidv4 } from '../../../utils/uuid';
+import { fileService } from '../../../services/fileService';
+import { quickIntentCheck } from '../../../utils/nluClient';
 
 // Quick action commands
 const AI_QUICK_ACTIONS = [
@@ -82,18 +85,6 @@ interface AgentArtifact {
   visible?: boolean;
 }
 
-interface AgentRunResult {
-  summary: string;
-  plan: string[];
-  actions: Array<{
-    type: string;
-    target: string;
-    success: boolean;
-    output: string;
-  }>;
-  nextSteps: string[];
-}
-
 interface AIChatPanelProps {
   title?: string;
   onClose?: () => void;
@@ -122,13 +113,15 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
     clearMessages, setStreaming, setError, context,
   } = useAIStore();
 
-  const { getActiveTab } = useEditorStore();
+  const { getActiveTab, tabs, replaceTabContent, openTab } = useEditorStore();
   const activeTab = getActiveTab();
   const activeLanguage = activeTab?.language ?? '';
 
   const { autoInstallForLanguage, installed } = useExtensionStore();
   const addNotification = useUIStore((state) => state.addNotification);
   const workspace = useWorkspaceStore((state) => state.workspace);
+  const setWorkspace = useWorkspaceStore((state) => state.setWorkspace);
+  const setFileTree = useFileStore((state) => state.setFileTree);
 
   // ── Auto-install extensions when active file language changes ──
   useEffect(() => {
@@ -199,7 +192,18 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
       workspacePath: workspace?.path,
     };
 
-    // Add user message
+    // Use client-side NLU for intent check
+    const { isQuestion, cleanedText } = quickIntentCheck(userText);
+    const isActionable = !isQuestion;
+
+    if (isActionable) {
+      // Route to the Agent — startAgentTask handles messages, streaming, and file operations
+      setAgentTask(userText);
+      await startAgentTask(userText);
+      return;
+    }
+
+    // Pure Q&A — use the chat endpoint (text-only response)
     const userMsg: ChatMessage = {
       id: uuidv4(),
       role: 'user',
@@ -208,7 +212,6 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
     };
     addMessage(userMsg);
 
-    // Add empty assistant message for streaming
     const assistantMsg: ChatMessage = {
       id: uuidv4(),
       role: 'assistant',
@@ -225,7 +228,15 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, context: aiContext }),
+        body: JSON.stringify({ 
+          prompt: cleanedText, 
+          context: aiContext,
+          conversationHistory: messages.slice(-20).map(m => ({
+            role: m.role,
+            content: m.content.slice(0, 2000),
+            timestamp: m.timestamp,
+          })),
+        }),
       });
 
       if (!response.ok) {
@@ -424,6 +435,46 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
     ]);
   };
 
+  const openGeneratedProjectInExplorer = async (paths: string[]) => {
+    const looksLikeProjectGeneration = paths.length >= 6
+      && paths.some((item) => /(^|[\\/])package\.json$/i.test(item));
+    if (!looksLikeProjectGeneration) return false;
+
+    const topLevel = paths
+      .map((item) => item.replace(/\\/g, '/').split('/')[0])
+      .filter((item) => item && item !== '.' && item !== '..');
+    const uniqueTopLevel = Array.from(new Set(topLevel));
+    if (uniqueTopLevel.length !== 1) return false;
+
+    const projectName = uniqueTopLevel[0];
+    const projectPath = `/workspace/${projectName}`;
+    try {
+      const tree = await fileService.getFileTree(projectPath);
+      if (!tree.length) return false;
+      setWorkspace({
+        id: `${projectName}-${Date.now()}`,
+        name: projectName,
+        path: projectPath,
+        createdAt: Date.now(),
+        lastOpenedAt: Date.now(),
+        recentFiles: [],
+        settings: {
+          theme: 'dark',
+          fontSize: 14,
+          tabSize: 2,
+          formatOnSave: true,
+          aiEnabled: true,
+          terminalShell: '/bin/bash',
+        },
+      });
+      setFileTree(tree);
+      addArtifact('Explorer opened project', projectPath, Files);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const completeAgentPlan = () => {
     setAgentSteps((steps) => steps.map((step) => ({ ...step, status: 'done' })));
   };
@@ -454,8 +505,8 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
     addArtifact('Browser check', 'Opened the running app in an external browser for visual verification.', Globe2);
   };
 
-  const startAgentTask = async () => {
-    const task = agentTask.trim();
+  const startAgentTask = async (taskArg?: string) => {
+    const task = (taskArg ?? agentTask).trim();
     if (!task || isStreaming) return;
 
     const plan = createAgentPlan(task);
@@ -503,6 +554,11 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
             workspaceName: workspace?.name || 'my-project',
             workspacePath: workspace?.path,
           },
+          conversationHistory: messages.slice(-20).map(m => ({
+            role: m.role,
+            content: m.content.slice(0, 2000),
+            timestamp: m.timestamp,
+          })),
         }),
       });
 
@@ -512,6 +568,19 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
       }
 
       const result = await response.json() as AgentRunResult;
+
+      // Handle clarification — show question, skip file operations
+      if (result.nluResult?.needsClarification || (result.actions.length === 0 && result.summary && !result.plan?.length)) {
+        appendToLastMessage(result.summary);
+        if (result.nextSteps?.length) {
+          appendToLastMessage('\n\n' + result.nextSteps.map(s => `- ${s}`).join('\n'));
+        }
+        completeAgentPlan();
+        finalizeStreaming();
+        stopAgentAnimation();
+        return;
+      }
+
       const changedFiles = result.actions
         .filter((action) => action.success && ['writeFile', 'appendFile', 'mkdir'].includes(action.type))
         .map((action) => action.target);
@@ -521,7 +590,15 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
         ? result.actions.map((action) => `${action.success ? 'OK' : 'FAILED'} ${action.type}: ${action.target}\n${action.output}`.trim()).join('\n\n')
         : 'No workspace actions were needed.';
 
+      let nluMessage = '';
+      if (result.nluResult) {
+        const nlu = result.nluResult;
+        const entitiesText = [...nlu.entities.frameworks, ...nlu.entities.languages, ...nlu.entities.features].join(', ') || 'none';
+        nluMessage = `> 🧠 **AI Understanding**\n> "${nlu.originalInput}" → "${nlu.correctedInput}"\n> Intent: **${nlu.intent}** | Entities: ${entitiesText}\n\n`;
+      }
+
       appendToLastMessage([
+        nluMessage,
         `**Summary**\n${result.summary}`,
         result.plan.length ? `**Plan**\n${result.plan.map((step, index) => `${index + 1}. ${step}`).join('\n')}` : '',
         `**Workspace actions**\n${actionLines}`,
@@ -531,7 +608,117 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
       completeAgentPlan();
       addArtifact('Agent result', `${succeeded} action(s) completed${failed ? `, ${failed} failed` : ''}.`, failed ? Bug : CheckCircle2);
       if (changedFiles.length > 0) {
-        window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed', { detail: { paths: changedFiles } }));
+        const currentWorkspacePath = workspace?.path;
+        const needsToOpenWorkspace = !currentWorkspacePath || currentWorkspacePath === '/workspace';
+
+        let openedNewWorkspace = false;
+        if (needsToOpenWorkspace) {
+          // Find the top-level folder from the changed files
+          const topLevel = changedFiles
+            .map((item) => item.replace(/\\/g, '/').split('/')[0])
+            .filter((item) => item && item !== '.' && item !== '..');
+          const uniqueTopLevel = Array.from(new Set(topLevel));
+          
+          if (uniqueTopLevel.length === 1) {
+            const projectName = uniqueTopLevel[0];
+            const projectPath = `/workspace/${projectName}`;
+            try {
+              const tree = await fileService.getFileTree(projectPath);
+              if (tree.length > 0) {
+                setWorkspace({
+                  id: `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
+                  name: projectName,
+                  path: projectPath,
+                  createdAt: Date.now(),
+                  lastOpenedAt: Date.now(),
+                  recentFiles: [],
+                  settings: {
+                    theme: 'dark',
+                    fontSize: 14,
+                    tabSize: 2,
+                    formatOnSave: true,
+                    aiEnabled: true,
+                    terminalShell: '/bin/bash',
+                  },
+                });
+                setFileTree(tree);
+                addArtifact('Explorer opened project', projectPath, Files);
+                openedNewWorkspace = true;
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        if (!openedNewWorkspace) {
+          const openedGeneratedProject = await openGeneratedProjectInExplorer(changedFiles);
+          if (!openedGeneratedProject) {
+            window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed', { detail: { paths: changedFiles } }));
+          }
+        }
+        // Refresh already-open tabs with the latest content from disk
+        await Promise.all(changedFiles.map(async (changedPath) => {
+          const existingTab = tabs.find((tab) => {
+            const tabPathNormal = tab.filePath.replace(/\\/g, '/').toLowerCase();
+            const workspacePathNormal = (workspace?.path || '').replace(/\\/g, '/').toLowerCase();
+            const changedPathNormal = changedPath.replace(/\\/g, '/').toLowerCase();
+            return (
+              tabPathNormal === changedPathNormal ||
+              tabPathNormal === `${workspacePathNormal}/${changedPathNormal}` ||
+              tabPathNormal.endsWith(`/${changedPathNormal}`)
+            ) && !tab.isDirty;
+          });
+          if (existingTab) {
+            try {
+              const file = await fileService.readFile(existingTab.filePath);
+              replaceTabContent(existingTab.id, file.content);
+            } catch {
+              // Explorer refresh still reflects the file-system result.
+            }
+          }
+        }));
+
+        // Auto-open newly created files in editor tabs (like Cursor does)
+        const writeActions = result.actions
+          .filter((action) => action.success && action.type === 'writeFile');
+        for (const action of writeActions) {
+          const filePath = action.target.replace(/\\/g, '/');
+          // Skip directories (mkdir) and files already open
+          const alreadyOpen = tabs.some((tab) => {
+            const norm = tab.filePath.replace(/\\/g, '/').toLowerCase();
+            return norm === filePath.toLowerCase() ||
+              norm.endsWith(`/${filePath.toLowerCase()}`);
+          });
+          if (!alreadyOpen) {
+            try {
+              const wsPath = workspace?.path || '/workspace';
+              const fullPath = filePath.startsWith('/') ? filePath : `${wsPath}/${filePath}`;
+              const file = await fileService.readFile(fullPath);
+              const ext = filePath.split('.').pop() || '';
+              const langMap: Record<string, string> = {
+                html: 'html', htm: 'html', css: 'css', js: 'javascript', jsx: 'javascript',
+                ts: 'typescript', tsx: 'typescript', json: 'json', md: 'markdown',
+                py: 'python', java: 'java', c: 'c', cpp: 'cpp', go: 'go', rs: 'rust',
+                sh: 'shell', yml: 'yaml', yaml: 'yaml', vue: 'vue', svelte: 'svelte',
+                php: 'php', rb: 'ruby', sql: 'sql', xml: 'xml', txt: 'plaintext',
+              };
+              openTab({
+                id: uuidv4(),
+                fileId: uuidv4(),
+                fileName: filePath.split('/').pop() || filePath,
+                filePath: fullPath,
+                content: file.content,
+                language: langMap[ext] || ext || 'plaintext',
+                isDirty: false,
+                isPreview: false,
+                cursorPosition: { line: 1, column: 1 },
+              });
+            } catch {
+              // File may not be readable yet — ignore
+            }
+          }
+        }
       }
       result.actions.slice(0, 5).forEach((action) => {
         addArtifact(
@@ -719,7 +906,7 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
               opacity: !agentTask.trim() || isStreaming ? 0.55 : 1,
             }}
             disabled={!agentTask.trim() || isStreaming}
-            onClick={startAgentTask}
+            onClick={() => startAgentTask()}
           >
             {isStreaming ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
             Start agent task
@@ -946,6 +1133,8 @@ export default function AIChatPanel({ title = 'Anywhere AI', onClose }: AIChatPa
 function MessageBubble({ message, onCopy }: { message: ChatMessage; onCopy: (c: string) => void }) {
   const isUser = message.role === 'user';
   const [showCopy, setShowCopy] = useState(false);
+  const { getActiveTab, updateTabContent } = useEditorStore();
+  const activeTab = getActiveTab();
 
   // Render markdown-like content
   const renderContent = (content: string) => {
@@ -960,13 +1149,26 @@ function MessageBubble({ message, onCopy }: { message: ChatMessage; onCopy: (c: 
           <div key={i} className="my-2 rounded overflow-hidden" style={{ background: '#0d0d0d', border: '1px solid var(--color-border)' }}>
             <div className="flex items-center justify-between px-3 py-1.5" style={{ background: '#1a1a1a', borderBottom: '1px solid var(--color-border)' }}>
               <span className="text-xxs" style={{ color: 'var(--color-textMuted)' }}>{lang || 'code'}</span>
-              <button
-                onClick={() => navigator.clipboard?.writeText(code)}
-                className="text-xxs flex items-center gap-1 hover:opacity-80"
-                style={{ color: 'var(--color-accent)' }}
-              >
-                <Copy size={10} /> Copy
-              </button>
+              <div className="flex items-center gap-2">
+                {activeTab && (
+                  <button
+                    onClick={() => {
+                      updateTabContent(activeTab.id, code);
+                    }}
+                    className="text-xxs flex items-center gap-1 hover:opacity-80 font-medium"
+                    style={{ color: '#34d399' }}
+                  >
+                    <Sparkles size={10} /> Apply to Editor
+                  </button>
+                )}
+                <button
+                  onClick={() => navigator.clipboard?.writeText(code)}
+                  className="text-xxs flex items-center gap-1 hover:opacity-80"
+                  style={{ color: 'var(--color-accent)' }}
+                >
+                  <Copy size={10} /> Copy
+                </button>
+              </div>
             </div>
             <pre className="p-3 overflow-x-auto text-xs" style={{ color: '#e2e2e2', fontFamily: 'JetBrains Mono, monospace' }}>
               <code>{code}</code>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { ChevronRight, ChevronDown, MoreHorizontal, Plus, FolderPlus, RefreshCw, ChevronsDownUp } from 'lucide-react';
 import { useFileStore } from '../../../store/fileStore';
 import { useEditorStore } from '../../../store/editorStore';
@@ -11,61 +11,134 @@ import { browserFileCache } from '../../../services/browserFileCache';
 import FileTypeIcon from '../../Icons/FileTypeIcon';
 
 export default function Explorer() {
-  const { fileTree, expandedFolders, toggleFolder, collapseFolder, selectedFileId, selectFile, addFile } = useFileStore();
+  const { fileTree, expandedFolders, toggleFolder, collapseFolder, selectedFileId, selectFile, setFileTree } = useFileStore();
   const workspace = useWorkspaceStore((state) => state.workspace);
   const { openTab } = useEditorStore();
   const { addNotification } = useUIStore();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null);
 
-  const createFile = () => {
+  const refreshExplorer = useCallback(async () => {
+    if (!workspace) return;
+    try {
+      const tree = await fileService.getFileTree(workspace.path);
+      setFileTree(tree);
+      addNotification({ type: 'success', message: 'Explorer refreshed' });
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to refresh Explorer',
+      });
+    }
+  }, [workspace, setFileTree, addNotification]);
+
+  useEffect(() => {
+    const handleWorkspaceChanged = () => {
+      void refreshExplorer();
+    };
+
+    window.addEventListener('ai-web-ide:workspace-changed', handleWorkspaceChanged);
+    return () => window.removeEventListener('ai-web-ide:workspace-changed', handleWorkspaceChanged);
+  }, [refreshExplorer]);
+
+  const createFile = async () => {
+    if (!workspace) return;
+    await createFileInFolder(workspace.path);
+  };
+
+  const createFileInFolder = async (folderPath: string) => {
     if (!workspace) return;
     const fileName = window.prompt('File name', 'new-file.txt')?.trim();
     if (!fileName) return;
 
     const language = getLanguageFromExtension(fileName);
-    const node: FileNode = {
-      id: `file-${Date.now()}`,
-      name: fileName,
-      path: `${workspace.path}/${fileName}`,
-      type: 'file',
-      extension: fileName.split('.').pop(),
-      language,
-      lastModified: Date.now(),
-    };
-
-    addFile(node);
-    openTab({
-      id: `tab-${node.id}`,
-      fileId: node.id,
-      filePath: node.path,
-      fileName,
-      language,
-      content: getDefaultContent(fileName, language),
-      isDirty: true,
-      isPreview: false,
-      cursorPosition: { line: 1, column: 1 },
-    });
-    addNotification({ type: 'success', message: `Created ${fileName}` });
+    const content = getDefaultContent(fileName, language);
+    try {
+      const node = await fileService.createFile(`${folderPath}/${fileName}`, content);
+      await refreshExplorer();
+      openTab({
+        id: `tab-${node.id}`,
+        fileId: node.id,
+        filePath: node.path,
+        fileName,
+        language,
+        content,
+        isDirty: false,
+        isPreview: false,
+        cursorPosition: { line: 1, column: 1 },
+      });
+      addNotification({ type: 'success', message: `Created ${fileName}` });
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : `Failed to create ${fileName}`,
+      });
+    }
   };
 
-  const createFolder = () => {
+  const createFolder = async () => {
+    if (!workspace) return;
+    await createFolderInFolder(workspace.path);
+  };
+
+  const createFolderInFolder = async (folderPath: string) => {
     if (!workspace) return;
     const folderName = window.prompt('Folder name', 'new-folder')?.trim();
     if (!folderName) return;
 
-    addFile({
-      id: `folder-${Date.now()}`,
-      name: folderName,
-      path: `${workspace.path}/${folderName}`,
-      type: 'directory',
-      children: [],
-      lastModified: Date.now(),
-    });
-    addNotification({ type: 'success', message: `Created ${folderName}` });
+    try {
+      await fileService.createFolder(`${folderPath}/${folderName}`);
+      await refreshExplorer();
+      addNotification({ type: 'success', message: `Created ${folderName}` });
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : `Failed to create ${folderName}`,
+      });
+    }
   };
 
-  const refreshExplorer = () => {
-    addNotification({ type: 'success', message: 'Explorer refreshed' });
+  const renameNode = async (node: FileNode) => {
+    const newName = window.prompt('New name', node.name)?.trim();
+    if (!newName || newName === node.name) return;
+
+    const separator = node.path.includes('\\') ? '\\' : '/';
+    const parentPath = node.path.split(/[\\/]/).slice(0, -1).join(separator);
+    const newPath = `${parentPath}${separator}${newName}`;
+
+    try {
+      await fileService.renameFile(node.path, newPath);
+      await refreshExplorer();
+      addNotification({ type: 'success', message: `Renamed ${node.name}` });
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : `Failed to rename ${node.name}`,
+      });
+    }
+  };
+
+  const deleteNode = async (node: FileNode) => {
+    if (!window.confirm(`Delete ${node.name}?`)) return;
+
+    try {
+      await fileService.deleteFile(node.path);
+      await refreshExplorer();
+      addNotification({ type: 'success', message: `Deleted ${node.name}` });
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : `Failed to delete ${node.name}`,
+      });
+    }
+  };
+
+  const copyRelativePath = (node: FileNode) => {
+    if (!workspace) return;
+    const relative = node.path
+      .replace(workspace.path, '')
+      .replace(/^[\\/]/, '')
+      .replace(/\\/g, '/');
+    navigator.clipboard?.writeText(relative);
   };
 
   const collapseAll = () => {
@@ -159,14 +232,14 @@ export default function Explorer() {
           }}
         >
           {[
-            { label: 'New File', action: () => {} },
-            { label: 'New Folder', action: () => {} },
+            { label: 'New File', action: () => void createFileInFolder(contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/')) },
+            { label: 'New Folder', action: () => void createFolderInFolder(contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/')) },
             null,
-            { label: 'Rename', action: () => {} },
-            { label: 'Delete', action: () => {} },
+            { label: 'Rename', action: () => void renameNode(contextMenu.node) },
+            { label: 'Delete', action: () => void deleteNode(contextMenu.node) },
             null,
             { label: 'Copy Path', action: () => navigator.clipboard?.writeText(contextMenu.node.path) },
-            { label: 'Copy Relative Path', action: () => {} },
+            { label: 'Copy Relative Path', action: () => copyRelativePath(contextMenu.node) },
             null,
             { label: 'Open in Terminal', action: () => {} },
           ].map((item, i) =>

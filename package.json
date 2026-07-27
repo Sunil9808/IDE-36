@@ -15,6 +15,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
     "axios": "^1.6.0",
+    "bootstrap": "^5.3.8",
     "clsx": "^2.0.0",
     "emmet-monaco-es": "^5.7.0",
     "framer-motion": "^10.16.0",

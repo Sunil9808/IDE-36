@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 type ActiveSidebarPanel = 'explorer' | 'search' | 'git' | 'debug' | 'extensions' | 'thunder' | 'ai' | null;
-type ActiveBottomPanel = 'terminal' | 'output' | 'problems' | 'debug' | 'ports';
+type ActiveBottomPanel = 'terminal' | 'preview' | 'output' | 'problems' | 'debug' | 'ports';
 
 interface UIStore {
   // Sidebar

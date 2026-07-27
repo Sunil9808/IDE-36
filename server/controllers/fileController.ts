@@ -1,25 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import path from 'path';
 import {
   buildFileTree, readFile, writeFile, createFile,
   createDirectory, deleteFile, renameFile, searchFiles,
 } from '../services/fileSystem/fileSystemService';
-
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT
-  ? path.resolve(process.env.WORKSPACE_ROOT)
-  : path.resolve('./storage/workspaces');
+import { getWorkspaceRoot, resolveWorkspacePath } from '../utils/workspaceRoot';
 
 function safePath(p: string): string {
-  const resolved = path.resolve(p);
-  // In production you'd validate the path is within workspace root
-  return resolved;
+  return resolveWorkspacePath(p);
 }
 
 export const fileController = {
   async getTree(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const dirPath = req.query.path as string || WORKSPACE_ROOT;
-      const tree = await buildFileTree(safePath(dirPath));
+      const dirPath = req.query.path as string | undefined;
+      const tree = await buildFileTree(dirPath ? safePath(dirPath) : getWorkspaceRoot());
       res.json(tree);
     } catch (error) {
       next(error);
@@ -88,7 +82,7 @@ export const fileController = {
     try {
       const { query, path: searchPath } = req.query as { query: string; path: string };
       if (!query) { res.status(400).json({ error: 'query is required' }); return; }
-      const rootPath = searchPath ? safePath(searchPath) : WORKSPACE_ROOT;
+      const rootPath = searchPath ? safePath(searchPath) : getWorkspaceRoot();
       const results = await searchFiles(query, rootPath);
       res.json(results);
     } catch (error) {

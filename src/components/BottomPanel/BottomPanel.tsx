@@ -1,16 +1,18 @@
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Terminal as TerminalIcon, Bug, AlertCircle, Radio, Eye, List } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import Terminal from './Terminal/Terminal';
 import OutputPanel from './Output/OutputPanel';
 import ProblemsPanel from './Problems/ProblemsPanel';
+import PreviewPanel from './Preview/PreviewPanel';
 
 const PANEL_TABS = [
-  { id: 'terminal', label: 'Terminal' },
-  { id: 'output', label: 'Output' },
-  { id: 'problems', label: 'Problems' },
-  { id: 'debug', label: 'Debug Console' },
-  { id: 'ports', label: 'Ports' },
-];
+  { id: 'terminal',  label: 'Terminal',      icon: TerminalIcon },
+  { id: 'preview',   label: 'Preview',       icon: Eye },
+  { id: 'output',    label: 'Output',        icon: List },
+  { id: 'problems',  label: 'Problems',      icon: AlertCircle },
+  { id: 'debug',     label: 'Debug Console', icon: Bug },
+  { id: 'ports',     label: 'Ports',         icon: Radio },
+] as const;
 
 export default function BottomPanel() {
   const { activeBottomPanel, setActiveBottomPanel, setBottomPanelVisible } = useUIStore();
@@ -25,11 +27,12 @@ export default function BottomPanel() {
 
   const renderPanel = () => {
     switch (activeBottomPanel) {
-      case 'terminal': return <Terminal />;
-      case 'output': return <OutputPanel />;
-      case 'problems': return <ProblemsPanel />;
+      case 'terminal':  return <Terminal />;
+      case 'preview':   return <PreviewPanel />;
+      case 'output':    return <OutputPanel />;
+      case 'problems':  return <ProblemsPanel />;
       default: return (
-        <div className="flex items-center justify-center h-full text-xs" style={{ color: 'var(--color-textMuted)' }}>
+        <div className="flex items-center justify-center h-full text-xs" style={{ color: 'var(--text-1)' }}>
           {activeBottomPanel} panel
         </div>
       );
@@ -38,43 +41,39 @@ export default function BottomPanel() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Panel tabs */}
-      <div
-        className="flex items-center flex-shrink-0 no-select"
-        style={{ background: 'var(--color-panel)', borderBottom: '1px solid var(--color-border)', height: 35 }}
-      >
-        <div className="flex items-center flex-1 overflow-x-auto">
-          {PANEL_TABS.map((tab) => (
+      {/* Panel tab bar */}
+      <div className="panel-tabs no-select">
+        <div className="flex items-center flex-1 overflow-x-auto no-scrollbar">
+          {PANEL_TABS.map(({ id, label, icon: Icon }) => (
             <button
-              key={tab.id}
-              onClick={() => setActiveBottomPanel(tab.id as typeof activeBottomPanel)}
-              className="px-4 h-full text-xs transition-colors flex-shrink-0 relative"
-              style={{
-                color: activeBottomPanel === tab.id ? 'var(--color-text)' : 'var(--color-textMuted)',
-                borderBottom: activeBottomPanel === tab.id
-                  ? '1px solid var(--color-accent)'
-                  : '1px solid transparent',
-                background: 'transparent',
-              }}
+              key={id}
+              role="tab"
+              aria-selected={activeBottomPanel === id}
+              onClick={() => setActiveBottomPanel(id as typeof activeBottomPanel)}
+              className={`panel-tab${activeBottomPanel === id ? ' active' : ''}`}
             >
-              {tab.label}
+              <Icon size={12} strokeWidth={activeBottomPanel === id ? 2.2 : 1.6} />
+              {label}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-1 px-2">
+        {/* Actions */}
+        <div className="flex items-center gap-1 px-2 flex-shrink-0">
           <button
             title="New Terminal"
-            className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
-            style={{ color: 'var(--color-textMuted)' }}
+            aria-label="New Terminal"
+            className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/8"
+            style={{ color: 'var(--text-1)' }}
             onClick={openNewTerminal}
           >
             <Plus size={13} />
           </button>
           <button
             title="Close Panel"
-            className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
-            style={{ color: 'var(--color-textMuted)' }}
+            aria-label="Close Panel"
+            className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/8"
+            style={{ color: 'var(--text-1)' }}
             onClick={() => setBottomPanelVisible(false)}
           >
             <X size={13} />
