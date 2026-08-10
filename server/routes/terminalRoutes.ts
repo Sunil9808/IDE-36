@@ -73,6 +73,31 @@ router.post('/cwd', (req: Request, res: Response) => {
   }
 });
 
+router.get('/userinfo', (_req: Request, res: Response) => {
+  try {
+    const userInfo = os.userInfo();
+    res.json({ username: userInfo.username, hostname: os.hostname() });
+  } catch (error) {
+    res.json({ username: 'user', hostname: 'local' });
+  }
+});
+
+router.get('/gitinfo', (req: Request, res: Response) => {
+  const cwd = resolveCommandCwd(req.query.cwd);
+  
+  exec('git rev-parse --abbrev-ref HEAD', { cwd, windowsHide: true }, (error, stdout) => {
+    if (error) {
+      return res.json({ branch: null, dirty: false });
+    }
+    const branch = stdout.trim();
+    
+    exec('git status --porcelain', { cwd, windowsHide: true }, (statusError, statusStdout) => {
+      const dirty = !statusError && statusStdout.trim().length > 0;
+      res.json({ branch, dirty });
+    });
+  });
+});
+
 // ── Real-time streaming terminal via SSE ─────────────────────────────────────
 router.post('/stream', (req: Request, res: Response) => {
   const command = String(req.body?.command || '').trim();

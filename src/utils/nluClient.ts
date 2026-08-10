@@ -141,6 +141,10 @@ const actionIntents = new Set([
   'create', 'make', 'build', 'add', 'edit', 'modify', 'fix', 'delete', 'remove', 'rename', 'refactor', 'debug', 'optimize', 'install', 'test', 'deploy', 'run', 'generate', 'review', 'convert', 'document'
 ]);
 
+const greetings = new Set([
+  'hi', 'hello', 'hey', 'hii', 'hiii', 'yo', 'sup', 'howdy', 'greetings', 'morning', 'evening', 'afternoon', 'thanks', 'thank', 'bye', 'goodbye', 'ok', 'okay', 'sure', 'yes', 'no', 'yeah', 'nah', 'cool', 'nice', 'great', 'awesome', 'perfect', 'good', 'fine', 'alright'
+]);
+
 export function cleanInput(text: string): string {
   if (!text) return '';
   let cleaned = text.toLowerCase();
@@ -166,6 +170,10 @@ export function quickIntentCheck(text: string): QuickIntentResult {
   // Apply typo correction
   const correctedWords = words.map(w => typos[w] || w);
   const cleanedText = correctedWords.join(' ');
+  
+  if (correctedWords.length <= 3 && greetings.has(correctedWords[0])) {
+    return { intent: 'greeting', cleanedText, isQuestion: true };
+  }
   
   let intent = 'unknown';
   let isQuestion = false;

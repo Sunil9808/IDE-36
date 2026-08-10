@@ -1,91 +1,24 @@
-import OpenAI from 'openai';
-import { GoogleGenerativeAI, GenerativeModel, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { Response } from 'express';
 import { ConversationEntry } from './nluService';
-
-let aiClient: OpenAI | null = null;
-let geminiClient: GoogleGenerativeAI | null = null;
-let geminiModel: GenerativeModel | null = null;
+import { adapterRegistry } from './adapterRegistry';
+import { AIContext } from './adapters/types';
 
 export function getAIProvider(): string {
   return (process.env.AI_PROVIDER || 'gemini').toLowerCase();
-}
-
-function getGeminiClient(): GenerativeModel {
-  if (!geminiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-      throw new Error('GEMINI_API_KEY is not configured. Add it to your .env file.');
-    }
-    geminiClient = new GoogleGenerativeAI(apiKey);
-  }
-  if (!geminiModel) {
-    // Use gemini-2.0-flash-lite for higher free-tier quota, fallback to gemini-1.5-flash
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-    geminiModel = geminiClient.getGenerativeModel({
-      model: modelName,
-      safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ],
-    });
-  }
-  return geminiModel;
-}
-
-
-function getAIClient(): OpenAI {
-  if (!aiClient) {
-    const provider = getAIProvider();
-    const isSambaNova = provider === 'sambanova';
-    const apiKey = isSambaNova ? process.env.SAMBANOVA_API_KEY : process.env.OPENAI_API_KEY;
-    const placeholder = isSambaNova ? 'your_sambanova_api_key_here' : 'your_openai_api_key_here';
-
-    if (!apiKey || apiKey === placeholder) {
-      throw new Error(`${isSambaNova ? 'SAMBANOVA_API_KEY' : 'OPENAI_API_KEY'} is not configured. Add it to your .env file.`);
-    }
-
-    aiClient = new OpenAI({
-      apiKey,
-      baseURL: isSambaNova
-        ? process.env.SAMBANOVA_BASE_URL || 'https://api.sambanova.ai/v1'
-        : process.env.OPENAI_BASE_URL,
-      timeout: parseInt(process.env.AI_TIMEOUT_MS || '300000', 10), // 5 minute timeout to allow generating large projects/websites
-    });
-  }
-  return aiClient;
 }
 
 export function getAIModel(): string {
   const provider = getAIProvider();
   if (provider === 'gemini') return process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   if (provider === 'sambanova') return process.env.SAMBANOVA_MODEL || 'Meta-Llama-3.3-70B-Instruct';
+  if (provider === 'anthropic') return process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest';
+  if (provider === 'ollama') return process.env.OLLAMA_MODEL || 'llama3';
   return process.env.OPENAI_MODEL || 'gpt-4o';
 }
 
-export interface AIContext {
-  currentFile?: {
-    path: string;
-    content: string;
-    language: string;
-    name: string;
-  };
-  selectedCode?: {
-    text: string;
-    startLine: number;
-    endLine: number;
-    language: string;
-  };
-  openFiles?: Array<{ path: string; name: string; language: string }>;
-  workspaceName?: string;
-  workspacePath?: string;
-  recentErrors?: string[];
-  terminalOutput?: string;
-}
+export { AIContext };
 
-function buildSystemPrompt(context: AIContext, conversationHistory: ConversationEntry[] = []): string {
+export function buildSystemPrompt(context: AIContext, conversationHistory: ConversationEntry[] = []): string {
   let systemPrompt = `You are an expert AI programming assistant integrated into AI Web IDE, a VS Code-style web IDE.
 
 Your capabilities:
@@ -141,129 +74,28 @@ Current workspace context:`;
   return systemPrompt;
 }
 
-// ── Gemini streaming ──────────────────────────────────────────────────────────
-
-async function streamGeminiResponse(prompt: string, context: AIContext, res: Response, conversationHistory: ConversationEntry[] = []): Promise<void> {
-  const systemPrompt = buildSystemPrompt(context, conversationHistory);
-  const model = getGeminiClient();
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-
-  try {
-    const fullPrompt = `${systemPrompt}\n\n---\n\nUser: ${prompt}\n\nAssistant:`;
-    const result = await model.generateContentStream(fullPrompt);
-
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
-      }
-    }
-
-    res.write('data: [DONE]\n\n');
-    res.end();
-  } catch (error: unknown) {
-    const err = error as Error & { status?: number; code?: string; statusText?: string; errorDetails?: unknown };
-    console.error('[Gemini] Full error:', JSON.stringify({ message: err.message, status: err.status, code: err.code, errorDetails: err.errorDetails }));
-
-    let errorMessage = 'Gemini AI request failed';
-    if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('API key not valid')) {
-      errorMessage = 'Invalid Gemini API key. Please check your .env file and restart the server.';
-    } else if (err.message?.includes('API key') || err.message?.includes('API_KEY')) {
-      errorMessage = 'Gemini API key error: ' + err.message;
-    } else if (err.status === 429 || err.message?.includes('429') || err.message?.includes('quota') || err.message?.includes('rate') || err.message?.includes('RESOURCE_EXHAUSTED')) {
-      errorMessage = '⚠️ Gemini rate limit hit. Your API key has exhausted the free quota. Get a new key from https://aistudio.google.com/app/apikey';
-    } else if (err.status === 403) {
-      errorMessage = 'Gemini API access denied. Check your API key permissions.';
-    } else if (err.message) {
-      errorMessage = err.message;
-    }
-
-    res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-  }
-}
-
-
-async function getGeminiCompletion(prompt: string, context: AIContext, maxTokens = 2000): Promise<string> {
-  const systemPrompt = buildSystemPrompt(context);
-  const model = getGeminiClient();
-
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${prompt}` }] }],
-    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
-  });
-
-  return result.response.text();
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function streamChatResponse(prompt: string, context: AIContext, res: Response, conversationHistory: ConversationEntry[] = []): Promise<void> {
-  const provider = getAIProvider();
-
-  if (provider === 'gemini') {
-    return streamGeminiResponse(prompt, context, res, conversationHistory);
-  }
-
-  // OpenAI / SambaNova path
-  const systemPrompt = buildSystemPrompt(context, conversationHistory);
-  const model = getAIModel();
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-
-  try {
-    const client = getAIClient();
-
-    const stream = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: 8192,
-      temperature: 0.7,
-      stream: true,
-    });
-
-    for await (const chunk of stream) {
-      const text = chunk.choices[0]?.delta?.content || '';
-      if (text) {
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
-      }
-      if (chunk.choices[0]?.finish_reason === 'stop') {
-        break;
-      }
-    }
-
-    res.write('data: [DONE]\n\n');
-    res.end();
-  } catch (error: unknown) {
-    const err = error as Error & { status?: number; code?: string };
-    console.error('AI streaming error:', err.message);
-
-    let errorMessage = 'AI request failed';
-    if (err.message?.includes('API key')) {
-      errorMessage = 'Invalid or missing AI API key. Check your .env file.';
-    } else if (err.status === 429) {
-      errorMessage = 'AI provider rate limit exceeded. Please wait and try again.';
-    } else if (err.status === 401) {
-      errorMessage = 'Invalid AI API key. Please check your .env configuration.';
-    } else if (err.message) {
-      errorMessage = err.message;
-    }
-
-    res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-  }
+export async function streamChatResponse(
+  prompt: string, 
+  context: AIContext, 
+  res: Response, 
+  conversationHistory: ConversationEntry[] = [],
+  options?: { provider?: string; model?: string; profile?: { temperature?: number; maxTokens?: number }; sessionId?: string }
+): Promise<void> {
+  const provider = options?.provider || getAIProvider();
+  const model = options?.model || getAIModel();
+  
+  const adapter = adapterRegistry.getAdapter(provider === 'sambanova' ? 'openai' : provider);
+  
+  await adapter.streamChat({
+    prompt,
+    context,
+    conversationHistory,
+    model,
+    profile: options?.profile,
+    sessionId: options?.sessionId
+  }, res);
 }
 
 export async function getInlineCompletion(
@@ -303,24 +135,13 @@ function cleanInlineCompletion(text: string): string {
 
 export async function getChatCompletion(prompt: string, context: AIContext, maxTokens = 2000): Promise<string> {
   const provider = getAIProvider();
-
-  if (provider === 'gemini') {
-    return getGeminiCompletion(prompt, context, maxTokens);
-  }
-
-  const systemPrompt = buildSystemPrompt(context);
   const model = getAIModel();
-
-  const client = getAIClient();
-  const completion = await client.chat.completions.create({
+  const adapter = adapterRegistry.getAdapter(provider === 'sambanova' ? 'openai' : provider);
+  
+  return adapter.getChatCompletion({
+    prompt,
+    context,
     model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: prompt },
-    ],
-    max_tokens: maxTokens,
-    temperature: 0.7,
+    profile: { maxTokens }
   });
-
-  return completion.choices[0]?.message?.content || '';
 }

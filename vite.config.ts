@@ -21,6 +21,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
+        proxyTimeout: 300000,
+        timeout: 300000,
       },
       '/socket.io': {
         target: 'http://localhost:5000',

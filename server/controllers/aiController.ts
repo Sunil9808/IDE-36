@@ -2,14 +2,37 @@ import { Request, Response, NextFunction } from 'express';
 import { streamChatResponse, getChatCompletion, getInlineCompletion, AIContext } from '../services/ai/aiService';
 import { runPairProgrammerAgent, autoDetectAndRecommendExtensions } from '../services/ai/agentService';
 import { processNLU, ConversationEntry } from '../services/ai/nluService';
+import { adapterRegistry } from '../services/ai/adapterRegistry';
 
 export const aiController = {
+  async getModels(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const models = await adapterRegistry.getAllModels();
+      res.json({ models });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getProviders(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const providers = adapterRegistry.getProviders();
+      res.json({ providers });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async chat(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { prompt, context = {}, conversationHistory = [] } = req.body as {
+      const { prompt, context = {}, conversationHistory = [], model, provider, profile, sessionId } = req.body as {
         prompt: string;
         context: AIContext;
         conversationHistory: ConversationEntry[];
+        model?: string;
+        provider?: string;
+        profile?: { temperature?: number; maxTokens?: number };
+        sessionId?: string;
       };
 
       if (!prompt || typeof prompt !== 'string') {
@@ -21,7 +44,7 @@ export const aiController = {
       const nluResult = processNLU(prompt, context, conversationHistory);
       const cleanedPrompt = nluResult.correctedInput || prompt;
 
-      await streamChatResponse(cleanedPrompt, context, res, conversationHistory);
+      await streamChatResponse(cleanedPrompt, context, res, conversationHistory, { provider, model, profile, sessionId });
     } catch (error) {
       next(error);
     }

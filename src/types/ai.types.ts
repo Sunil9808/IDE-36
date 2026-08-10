@@ -7,6 +7,10 @@ export interface ChatMessage {
   tokens?: number;
   model?: string;
   codeBlocks?: CodeBlock[];
+  latencyMs?: number;
+  tokenCount?: number;
+  estimatedCost?: number;
+  modelUsed?: string;
 }
 
 export interface CodeBlock {
@@ -84,10 +88,43 @@ export interface AICommand {
 export interface AIModel {
   id: string;
   name: string;
-  provider: 'openai' | 'gemini' | 'anthropic';
+  provider: 'openai' | 'gemini' | 'anthropic' | 'local';
   maxTokens: number;
   supportsStreaming: boolean;
   description: string;
+}
+
+export interface ModelInfo {
+  id: string;
+  provider: string;
+  name: string;
+  capabilities: string[];
+  maxTokens: number;
+  costPer1kInput: number;
+  costPer1kOutput: number;
+  status: 'available' | 'error' | 'unconfigured';
+}
+
+export interface BehaviorProfile {
+  id: string;
+  name: string;
+  description: string;
+  temperature: number;
+  topP: number;
+  maxTokens: number;
+  systemPromptModifier: string;
+  color: string;
+  icon: string;
+}
+
+export interface Session {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  model: string;
+  profile: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface AISettings {

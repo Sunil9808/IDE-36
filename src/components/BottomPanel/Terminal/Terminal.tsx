@@ -68,6 +68,70 @@ function createTerminalInstance(cwd: string, profile: TerminalProfile = 'PowerSh
   };
 }
 
+let cachedUserInfo: { username: string; hostname: string } | null = null;
+async function fetchUserInfo() {
+  if (cachedUserInfo) return cachedUserInfo;
+  try {
+    const res = await fetch('/api/terminal/userinfo');
+    if (res.ok) cachedUserInfo = await res.json();
+    else cachedUserInfo = { username: 'user', hostname: 'local' };
+  } catch {
+    cachedUserInfo = { username: 'user', hostname: 'local' };
+  }
+  return cachedUserInfo;
+}
+
+const branchCache = new Map<string, { branch: string | null; dirty: boolean }>();
+async function fetchGitBranch(cwd: string) {
+  try {
+    const res = await fetch(`/api/terminal/gitinfo?cwd=${encodeURIComponent(cwd)}`);
+    if (res.ok) {
+      const data = await res.json();
+      branchCache.set(cwd, data);
+      return data;
+    }
+  } catch {}
+  return { branch: null, dirty: false };
+}
+
+async function buildPrompt(profile: TerminalProfile, cwd: string): Promise<string> {
+  const formatPath = (p: string) => {
+    const normalized = p.replace(/\\/g, '/');
+    const homeMatch = normalized.match(/^[a-zA-Z]:\/Users\/[^/]+/i);
+    if (homeMatch) {
+      return '~' + normalized.slice(homeMatch[0].length);
+    }
+    return normalized;
+  };
+
+  switch (profile) {
+    case 'PowerShell':
+      return `\x1b[34mPS \x1b[33m${cwd}\x1b[0m> `;
+    case 'Command Prompt':
+      return `\x1b[33m${cwd}\x1b[0m>`;
+    case 'Node.js':
+      return `\x1b[32m> \x1b[0m`;
+    case 'Git Bash':
+    case 'Bash':
+    case 'WSL': {
+      const { username, hostname } = (await fetchUserInfo()) || { username: 'user', hostname: 'host' };
+      const { branch, dirty } = await fetchGitBranch(cwd);
+      const isGitBash = profile === 'Git Bash';
+      
+      let p = `\x1b[1;32m${username}@${hostname} \x1b[0m`;
+      if (isGitBash) p += `\x1b[1;35mMINGW64 \x1b[0m`;
+      p += `\x1b[1;33m${formatPath(cwd)} \x1b[0m`;
+      if (branch) {
+        p += `\x1b[36m(${branch}${dirty ? '*' : ''}) \x1b[0m`;
+      }
+      p += `\r\n$ `;
+      return p;
+    }
+    default:
+      return `${profile} ${cwd}> `;
+  }
+}
+
 export default function Terminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -96,37 +160,41 @@ export default function Terminal() {
   const activeInstanceProfile = activeInstance.profile;
   const activeProfileName = activeProfile.name;
   const activeProfileShell = activeProfile.shell;
-  const prompt = activeInstance.profile === 'Command Prompt'
-    ? `${activeInstance.cwd}>`
-    : `${activeInstance.profile} ${activeInstance.cwd}> `;
 
+  const fitTimeoutRef = useRef<number | null>(null);
   const fit = useCallback(() => {
-    try {
-      fitAddonRef.current?.fit();
-    } catch {
-      // xterm can throw during intermediate layout states.
+    if (fitTimeoutRef.current !== null) {
+      window.clearTimeout(fitTimeoutRef.current);
     }
+    fitTimeoutRef.current = window.setTimeout(() => {
+      try {
+        fitAddonRef.current?.fit();
+      } catch {
+        // xterm can throw during intermediate layout states.
+      }
+    }, 30);
   }, []);
 
-  const writePrompt = useCallback(() => {
-    xtermRef.current?.write(`\x1b[38;2;204;204;204m${prompt}\x1b[0m`);
-  }, [prompt]);
+  const writePrompt = useCallback(async (overrideCwd?: string) => {
+    const promptStr = await buildPrompt(activeInstanceProfile, overrideCwd || activeInstanceCwd);
+    xtermRef.current?.write(promptStr);
+  }, [activeInstanceProfile, activeInstanceCwd]);
 
-  const resetLine = useCallback((nextLine = '') => {
+  const resetLine = useCallback(async (nextLine = '') => {
     const term = xtermRef.current;
     if (!term) return;
     term.write('\x1b[2K\r');
-    writePrompt();
+    await writePrompt();
     lineRef.current = nextLine;
     term.write(nextLine);
   }, [writePrompt]);
 
-  const clearTerminal = useCallback(() => {
+  const clearTerminal = useCallback(async () => {
     const term = xtermRef.current;
     if (!term) return;
     term.clear();
     lineRef.current = '';
-    writePrompt();
+    await writePrompt();
     term.focus();
   }, [writePrompt]);
 
@@ -152,11 +220,13 @@ export default function Terminal() {
 
     term.write(trimmed);
     term.writeln('');
-    void handleFallbackCommand(term, trimmed, activeInstance.cwd).then((nextCwd) => {
+    void handleFallbackCommand(term, trimmed, activeInstance.cwd).then(async (nextCwd) => {
       if (nextCwd) setActiveCwd(nextCwd);
-    }).finally(() => {
       lineRef.current = '';
-      writePrompt();
+      await writePrompt(nextCwd || activeInstance.cwd);
+    }).catch(async () => {
+      lineRef.current = '';
+      await writePrompt();
     });
   }, [activeInstance.cwd, setActiveCwd, writePrompt]);
 
@@ -221,7 +291,6 @@ export default function Terminal() {
       cursorStyle: 'bar',
       scrollback: 10000,
       convertEol: true,
-      windowsMode: true,
       allowProposedApi: true,
     });
 
@@ -303,9 +372,12 @@ export default function Terminal() {
         ));
         term.clear();
         if (!session.isConnected) {
-          term.writeln('\x1b[33mInteractive shell unavailable. Commands will run through the backend command runner.\x1b[0m');
-          term.writeln('\x1b[90mInstall node-pty in the server for full interactive shells, Ctrl+C, prompts, TUI apps, and long-running sessions.\x1b[0m');
-          writePrompt();
+          term.writeln('\x1b[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m');
+          term.writeln('\x1b[1;32m AI Web IDE Terminal \x1b[0m\x1b[90m[Version 1.0.0]\x1b[0m');
+          term.writeln('\x1b[33m Interactive shell unavailable. Using HTTP command runner fallback.\x1b[0m');
+          term.writeln('\x1b[90m Type \'help\' for available commands.\x1b[0m');
+          term.writeln('\x1b[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+          void writePrompt();
         }
         term.focus();
       };
@@ -370,9 +442,11 @@ export default function Terminal() {
     setInstances((current) => current.map((instance) =>
       instance.id === sessionId ? { ...instance, isConnected: false } : instance
     ));
-    term.writeln(`\x1b[90m${activeProfileName} fallback terminal\x1b[0m`);
-    term.writeln('\x1b[90mCommands run through the backend command runner when available.\x1b[0m');
-    writePrompt();
+    term.writeln('\x1b[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m');
+    term.writeln(`\x1b[1;32m AI Web IDE Terminal \x1b[0m\x1b[90m[${activeProfileName} fallback]\x1b[0m`);
+    term.writeln('\x1b[90m Type \'help\' for available commands.\x1b[0m');
+    term.writeln('\x1b[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+    void writePrompt();
 
     const dataDisposable = term.onData((data) => {
       if (data === '\r') {
@@ -380,17 +454,20 @@ export default function Terminal() {
         const command = lineRef.current.trim();
         if (command) {
           historyRef.current = [command, ...historyRef.current.filter((item) => item !== command)].slice(0, 80);
-          void handleFallbackCommand(term, command, activeInstanceCwd).then((nextCwd) => {
+          void handleFallbackCommand(term, command, activeInstanceCwd).then(async (nextCwd) => {
             if (nextCwd) setActiveCwd(nextCwd);
-          }).finally(() => {
             lineRef.current = '';
             historyIndexRef.current = null;
-            writePrompt();
+            await writePrompt(nextCwd || activeInstanceCwd);
+          }).catch(async () => {
+            lineRef.current = '';
+            historyIndexRef.current = null;
+            await writePrompt();
           });
         } else {
           lineRef.current = '';
           historyIndexRef.current = null;
-          writePrompt();
+          void writePrompt();
         }
         return;
       }
@@ -408,7 +485,7 @@ export default function Terminal() {
         term.writeln('');
         lineRef.current = '';
         historyIndexRef.current = null;
-        writePrompt();
+        void writePrompt();
         return;
       }
 
@@ -418,7 +495,7 @@ export default function Terminal() {
           ? 0
           : Math.min(historyRef.current.length - 1, historyIndexRef.current + 1);
         historyIndexRef.current = nextIndex;
-        resetLine(historyRef.current[nextIndex]);
+        void resetLine(historyRef.current[nextIndex]);
         return;
       }
 
@@ -427,10 +504,10 @@ export default function Terminal() {
         const nextIndex = historyIndexRef.current - 1;
         if (nextIndex < 0) {
           historyIndexRef.current = null;
-          resetLine('');
+          void resetLine('');
         } else {
           historyIndexRef.current = nextIndex;
-          resetLine(historyRef.current[nextIndex]);
+          void resetLine(historyRef.current[nextIndex]);
         }
         return;
       }
@@ -586,7 +663,9 @@ export default function Terminal() {
           </div>
         </div>
 
-        <div ref={terminalRef} className="min-h-0 flex-1 overflow-hidden" style={{ padding: '8px 0 4px 8px' }} />
+        <div className="min-h-0 flex-1 overflow-hidden" style={{ padding: '8px 0 4px 8px' }}>
+          <div ref={terminalRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
+        </div>
       </div>
     </div>
   );
@@ -612,21 +691,22 @@ async function handleLocalTerminalData(
   lineRef: { current: string },
   historyRef: { current: string[] },
   historyIndexRef: { current: number | null },
-  writePrompt: () => void,
-  resetLine: (nextLine?: string) => void,
+  writePrompt: (cwd?: string) => Promise<void>,
+  resetLine: (nextLine?: string) => Promise<void>,
   setCwd: (cwd: string) => void
 ) {
   if (data === '\r') {
     term.writeln('');
     const command = lineRef.current.trim();
+    let nextCwd;
     if (command) {
       historyRef.current = [command, ...historyRef.current.filter((item) => item !== command)].slice(0, 80);
-      const nextCwd = await handleFallbackCommand(term, command, cwd);
+      nextCwd = await handleFallbackCommand(term, command, cwd);
       if (nextCwd) setCwd(nextCwd);
     }
     lineRef.current = '';
     historyIndexRef.current = null;
-    writePrompt();
+    await writePrompt(nextCwd || cwd);
     return;
   }
 
@@ -643,7 +723,7 @@ async function handleLocalTerminalData(
     term.writeln('');
     lineRef.current = '';
     historyIndexRef.current = null;
-    writePrompt();
+    await writePrompt();
     return;
   }
 
@@ -653,7 +733,7 @@ async function handleLocalTerminalData(
       ? 0
       : Math.min(historyRef.current.length - 1, historyIndexRef.current + 1);
     historyIndexRef.current = nextIndex;
-    resetLine(historyRef.current[nextIndex]);
+    await resetLine(historyRef.current[nextIndex]);
     return;
   }
 
@@ -662,10 +742,10 @@ async function handleLocalTerminalData(
     const nextIndex = historyIndexRef.current - 1;
     if (nextIndex < 0) {
       historyIndexRef.current = null;
-      resetLine('');
+      await resetLine('');
     } else {
       historyIndexRef.current = nextIndex;
-      resetLine(historyRef.current[nextIndex]);
+      await resetLine(historyRef.current[nextIndex]);
     }
     return;
   }
