@@ -9,6 +9,7 @@ import { ProfileSelector } from './ProfileSelector';
 import { MessageBubble } from './MessageBubble';
 import { SessionList } from './SessionList';
 import { WelcomeScreen } from './WelcomeScreen';
+import { AgentPanel } from './AgentPanel';
 
 interface AIChatPanelProps {
   title?: string;
@@ -16,6 +17,7 @@ interface AIChatPanelProps {
 }
 
 export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatPanelProps) {
+  const [activeMode, setActiveMode] = useState<'chat' | 'agent'>('chat');
   const [input, setInput] = useState('');
   const [showSessions, setShowSessions] = useState(false);
   
@@ -66,27 +68,48 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0d1117] text-gray-200 relative overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--bg-1)] text-[var(--text-0)] relative overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 flex flex-col p-3 border-b border-gray-800 bg-[#161b22]">
+      <div className="flex-shrink-0 flex flex-col p-3 border-b border-[var(--border-0)] glass-panel z-10">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setShowSessions(true)}
-              className="p-1.5 hover:bg-gray-700/50 rounded text-gray-400 hover:text-gray-200 transition-colors"
+              className="p-1.5 hover:bg-[var(--hover)] rounded text-[var(--text-1)] hover:text-[var(--text-0)] transition-colors"
             >
               <Menu size={18} />
             </button>
-            <span className="font-semibold text-sm">{title}</span>
+            <div className="flex bg-[var(--bg-2)] rounded-lg p-0.5 border border-[var(--border-0)]">
+              <button 
+                onClick={() => setActiveMode('chat')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${activeMode === 'chat' ? 'bg-[var(--accent)] text-white shadow-sm' : 'text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--hover)]'}`}
+              >
+                Chat
+              </button>
+              <button 
+                onClick={() => setActiveMode('agent')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${activeMode === 'agent' ? 'bg-[var(--accent)] text-white shadow-sm' : 'text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--hover)]'}`}
+              >
+                Agent
+              </button>
+            </div>
           </div>
         </div>
         
-        <ModelSelector />
-        <ProfileSelector />
+        {activeMode === 'chat' && (
+          <>
+            <ModelSelector />
+            <ProfileSelector />
+          </>
+        )}
       </div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+      {activeMode === 'agent' ? (
+        <AgentPanel />
+      ) : (
+        <>
+          {/* Main Chat Area */}
+          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
         {messages.length === 0 ? (
           <WelcomeScreen onActionSelect={handleActionSelect} />
         ) : (
@@ -97,10 +120,10 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
             <div ref={messagesEndRef} />
           </div>
         )}
-      </div>
+          </div>
 
       {/* Input Area */}
-      <div className="flex-shrink-0 p-4 bg-[#161b22] border-t border-gray-800">
+      <div className="flex-shrink-0 p-4 bg-[var(--bg-2)] border-t border-[var(--border-0)]">
         {activeTab && (
           <div className="flex items-center gap-1.5 mb-2 px-2 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs w-fit">
             <FileCode2 size={12} />
@@ -108,8 +131,8 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
           </div>
         )}
         
-        <div className="relative flex items-end bg-[#0d1117] border border-gray-700 rounded-xl focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50 transition-all shadow-sm">
-          <button className="p-3 text-gray-500 hover:text-gray-300 transition-colors shrink-0">
+        <div className="relative flex items-end bg-[var(--bg-0)] border border-[var(--border-1)] rounded-xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-sm">
+          <button className="p-3 text-[var(--text-1)] hover:text-[var(--text-0)] transition-colors shrink-0">
             <Paperclip size={18} />
           </button>
           
@@ -128,7 +151,7 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
             {isStreaming ? (
               <button 
                 onClick={cancelStream}
-                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                className="p-2 bg-[var(--error-dim)] hover:bg-[var(--error)] text-[var(--error)] hover:text-white rounded-lg transition-colors"
                 title="Stop Generating"
               >
                 <Square size={16} fill="currentColor" />
@@ -137,17 +160,19 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
               <button 
                 onClick={handleSend}
                 disabled={!input.trim()}
-                className="p-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
+                className="p-2 bg-[var(--accent)] hover:bg-[var(--accentHover)] disabled:bg-[var(--bg-3)] disabled:text-[var(--text-1)] text-white rounded-lg transition-colors"
               >
                 <ArrowUp size={16} strokeWidth={3} />
               </button>
             )}
           </div>
         </div>
-        <div className="text-center mt-2 text-[10px] text-gray-500">
+        <div className="text-center mt-2 text-[10px] text-[var(--text-2)]">
           AI can make mistakes. Verify critical code.
         </div>
       </div>
+        </>
+      )}
 
       {showSessions && <SessionList onClose={() => setShowSessions(false)} />}
     </div>

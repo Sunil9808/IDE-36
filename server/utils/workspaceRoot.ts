@@ -1,13 +1,32 @@
 import path from 'path';
 
+import fs from 'fs';
+
+const ROOT_FILE = path.resolve(process.cwd(), '.workspace-root.txt');
+
 export function getWorkspaceRoot(): string {
   if (process.env.WORKSPACE_ROOT) {
     return path.resolve(process.env.WORKSPACE_ROOT);
   }
+  
+  if (fs.existsSync(ROOT_FILE)) {
+    const savedPath = fs.readFileSync(ROOT_FILE, 'utf-8').trim();
+    if (savedPath && fs.existsSync(savedPath)) {
+      return path.resolve(savedPath);
+    }
+  }
 
-  return path.basename(process.cwd()).toLowerCase() === 'server'
-    ? path.resolve(process.cwd(), '..')
-    : path.resolve(process.cwd());
+  // Fallback to home directory to prevent using the IDE's source folder
+  const homeDir = process.env.USERPROFILE || process.env.HOME || process.cwd();
+  return path.resolve(homeDir);
+}
+
+export function setWorkspaceRoot(newPath: string): void {
+  const resolved = path.resolve(newPath);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`Path does not exist: ${resolved}`);
+  }
+  fs.writeFileSync(ROOT_FILE, resolved, 'utf-8');
 }
 
 export function resolveWorkspacePath(requestedPath?: string): string {

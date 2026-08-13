@@ -31,16 +31,19 @@ class AdapterRegistry {
   }
 
   async getAllModels(): Promise<ModelInfo[]> {
-    const allModels: ModelInfo[] = [];
-    for (const adapter of this.adapters.values()) {
+    // Only query the active provider to avoid connection errors from unconfigured providers
+    const activeProvider = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+    const adapterId = activeProvider === 'sambanova' ? 'openai' : activeProvider;
+    const adapter = this.adapters.get(adapterId);
+    if (adapter) {
       try {
-        const models = await adapter.getModels();
-        allModels.push(...models);
+        return await adapter.getModels();
       } catch (e) {
-        console.warn(`Failed to get models for provider ${adapter.id}`, e);
+        console.warn(`Failed to get models for provider ${adapter.id}:`, (e as Error).message);
+        return [];
       }
     }
-    return allModels;
+    return [];
   }
 }
 

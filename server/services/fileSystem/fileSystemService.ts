@@ -58,8 +58,11 @@ export async function buildFileTree(dirPath: string, depth = 0): Promise<FileNod
       if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
-  } catch (err) {
-    console.error('Error building file tree:', err);
+  } catch (err: any) {
+    if (depth === 0) {
+      throw new Error(`Failed to read directory ${dirPath}: ${err.message}`);
+    }
+    console.error(`Error building file tree at depth ${depth}:`, err);
     return [];
   }
 }

@@ -25,12 +25,18 @@ export class OpenAIAdapter implements ModelAdapter {
   }
 
   async getModels(): Promise<ModelInfo[]> {
+    const defaultModel = process.env.OPENAI_MODEL;
+    if (defaultModel) {
+      return [
+        { id: defaultModel, name: defaultModel.split('/').pop() + ' (Default)', provider: this.id }
+      ];
+    }
+
     try {
       const client = this.getClient();
       const response = await client.models.list();
       return response.data.map(m => ({ id: m.id, name: m.id, provider: this.id }));
     } catch (e) {
-      // Fallback
       return [
         { id: 'gpt-4o', name: 'GPT-4o', provider: this.id },
         { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: this.id },
@@ -40,7 +46,13 @@ export class OpenAIAdapter implements ModelAdapter {
   }
 
   async streamChat(options: ChatRequestOptions, res: Response): Promise<void> {
-    const { prompt, context, conversationHistory = [], model = 'gpt-4o', profile } = options;
+    let { prompt, context, conversationHistory = [], model = 'gpt-4o', profile } = options;
+    
+    // Always use the configured model from environment to prevent 404s from unsupported models
+    if (process.env.OPENAI_MODEL) {
+      model = process.env.OPENAI_MODEL;
+    }
+
     const systemPrompt = buildSystemPrompt(context, conversationHistory);
     const client = this.getClient();
 
@@ -48,13 +60,20 @@ export class OpenAIAdapter implements ModelAdapter {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
+    // Build messages with conversation history for multi-turn context
+    const historyMessages = (conversationHistory || []).slice(-10).map(entry => ({
+      role: (entry.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: typeof entry.content === 'string' ? entry.content.slice(0, 2000) : String(entry.content)
+    }));
+
     const startTime = Date.now();
     try {
       const stream = await client.chat.completions.create({
         model,
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
+          { role: 'system' as const, content: systemPrompt },
+          ...historyMessages,
+          { role: 'user' as const, content: prompt },
         ],
         max_tokens: profile?.maxTokens || 8192,
         temperature: profile?.temperature ?? 0.7,
@@ -92,15 +111,28 @@ export class OpenAIAdapter implements ModelAdapter {
   }
 
   async getChatCompletion(options: ChatRequestOptions): Promise<string> {
-    const { prompt, context, conversationHistory = [], model = 'gpt-4o', profile } = options;
+    let { prompt, context, conversationHistory = [], model = 'gpt-4o', profile } = options;
+
+    // Always use the configured model from environment to prevent 404s from unsupported models
+    if (process.env.OPENAI_MODEL) {
+      model = process.env.OPENAI_MODEL;
+    }
+
     const systemPrompt = buildSystemPrompt(context, conversationHistory);
     const client = this.getClient();
+
+    // Build messages with conversation history
+    const historyMessages = (conversationHistory || []).slice(-10).map(entry => ({
+      role: (entry.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: typeof entry.content === 'string' ? entry.content.slice(0, 2000) : String(entry.content)
+    }));
 
     const completion = await client.chat.completions.create({
       model,
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
+        { role: 'system' as const, content: systemPrompt },
+        ...historyMessages,
+        { role: 'user' as const, content: prompt },
       ],
       max_tokens: profile?.maxTokens || 2000,
       temperature: profile?.temperature ?? 0.7,

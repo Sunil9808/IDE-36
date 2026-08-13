@@ -1,6 +1,7 @@
 import { Socket } from 'socket.io';
 import os from 'os';
 import fs from 'fs';
+import { resolveWorkspacePath } from '../utils/workspaceRoot';
 
 interface TerminalSession {
   pty: unknown;
@@ -87,13 +88,19 @@ export function initTerminalSocket(socket: Socket): void {
       }
 
       const resolvedShell = resolveShell(shell);
-      const workDir = cwd || os.homedir();
+      let workDir;
+      try {
+        workDir = cwd ? resolveWorkspacePath(cwd) : os.homedir();
+      } catch {
+        workDir = os.homedir();
+      }
 
       const ptyProcess = pty.spawn(resolvedShell.file, resolvedShell.args, {
         name: 'xterm-256color',
         cols,
         rows,
         cwd: workDir,
+        useConpty: false,
         env: {
           ...process.env,
           TERM: 'xterm-256color',

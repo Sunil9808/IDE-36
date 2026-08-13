@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowLeft,
   ArrowRight,
   Bot,
@@ -122,7 +122,7 @@ export default function TitleBar() {
   useEffect(() => {
     const openFolder = (event: Event) => {
       openFolderModeRef.current = (event as CustomEvent<{ mode?: 'open' | 'add' }>).detail?.mode || 'open';
-      triggerOpenFolder();
+      openFolderInputRef.current?.click();
     };
     const openFile = () => openFileInputRef.current?.click();
     const notifyFromEvent = (event: Event) => {
@@ -388,48 +388,13 @@ export default function TitleBar() {
   };
 
   const triggerOpenFile = () => openFileInputRef.current?.click();
-  
-  const triggerOpenFolder = async () => {
-    try {
-      if (!('showDirectoryPicker' in window)) {
-        notify('Your browser does not support the Native File System API. Please use a modern version of Chrome, Edge, or Opera.', 'error');
-        return;
-      }
-
-      notify('Waiting for folder selection...', 'info');
-      // Request native directory picker
-      const dirHandle = await (window as any).showDirectoryPicker({
-        mode: 'readwrite',
-      });
-
-      if (!dirHandle) return;
-
-      const workspaceId = `local-${Date.now()}`;
-      const workspaceName = dirHandle.name;
-      
-      closeAllTabs();
-      
-      // We pass the handle to setWorkspace so it can be used by fileService
-      setWorkspace({ 
-        id: workspaceId, 
-        name: workspaceName, 
-        path: `/${workspaceName}`, // Virtual path for UI purposes
-        type: 'local', 
-        createdAt: Date.now(), 
-        lastOpenedAt: Date.now() 
-      }, dirHandle);
-      
-      notify(`Workspace opened: ${workspaceName}`, 'success');
-      window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        notify(`Failed to open folder: ${err.message || String(err)}`, 'error');
-      }
-    }
+  const triggerOpenFolder = () => {
+    openFolderModeRef.current = 'open';
+    openFolderInputRef.current?.click();
   };
-
   const triggerAddFolder = () => {
-    notify('Add Folder to workspace is not fully supported with single absolute root. Please open a unified parent folder instead.', 'warning');
+    openFolderModeRef.current = 'add';
+    openFolderInputRef.current?.click();
   };
 
   const handleOpenFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -471,8 +436,23 @@ export default function TitleBar() {
   };
 
   const handleOpenFolder = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    // This is no longer used for webkitdirectory upload since we prompt for absolute path instead.
+    const files = Array.from(event.target.files || []);
     event.target.value = '';
+    if (!files.length) return;
+
+    const isAddFolder = openFolderModeRef.current === 'add';
+    if (!isAddFolder) {
+      browserFileCache.clear();
+    }
+    const tree = await buildFolderTree(files);
+    const folderName = tree[0]?.name || 'Opened Folder';
+    if (!isAddFolder) {
+      closeAllTabs();
+    }
+    setWorkspace(createWorkspaceDescriptor(folderName, `/local-folder/${folderName}`));
+    setFileTree((isAddFolder ? [...useFileStore.getState().fileTree, ...tree] : tree));
+    notify(`${isAddFolder ? 'Added' : 'Opened'} ${folderName} with ${files.length} file${files.length === 1 ? '' : 's'}`, 'success');
+    openFolderModeRef.current = 'open';
   };
 
   const saveActiveFile = async () => {
@@ -971,14 +951,13 @@ export default function TitleBar() {
       style={{ background: 'var(--color-titleBar)', borderBottom: '1px solid var(--color-border)' }}
     >
       <input ref={openFileInputRef} type="file" multiple className="hidden" onChange={handleOpenFiles} />
-      {/* webkitdirectory is a non-standard attr — spread as lowercase so React passes it to DOM */}
+      {/* webkitdirectory is a non-standard attr ΓÇö spread as lowercase so React passes it to DOM */}
       <input
         ref={openFolderInputRef}
         type="file"
         multiple
         className="hidden"
         onChange={handleOpenFolder}
-        onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
         // @ts-expect-error webkitdirectory is not in React's HTMLAttributes
         webkitdirectory=""
         directory=""
@@ -1057,7 +1036,7 @@ export default function TitleBar() {
             title="Search (Ctrl+Shift+P)"
           >
             <Search size={14} className="mr-2.5 opacity-60" />
-            <span>Search files, commands…</span>
+            <span>Search files, commandsΓÇª</span>
             <span className="ml-auto text-[11px] opacity-50">Ctrl+P</span>
           </button>
         </div>
@@ -1158,9 +1137,10 @@ export default function TitleBar() {
         </div>
       </div>
 
+
     </div>
   );
-};
+}
 
 function SimpleDropdown({ items }: { items: MenuSubItem[] }) {
   return (

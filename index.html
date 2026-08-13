@@ -14,15 +14,6 @@
 </head>
 <body>
     <div id="root"></div>
-    <div id="error-log" style="color: red; position: fixed; top: 0; left: 0; z-index: 9999; background: black;"></div>
-    <script>
-      window.onerror = function(msg, url, line, col, error) {
-        document.getElementById('error-log').innerHTML += '<br/>' + msg;
-      };
-      window.onunhandledrejection = function(event) {
-        document.getElementById('error-log').innerHTML += '<br/>Unhandled promise: ' + event.reason;
-      };
-    </script>
     <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

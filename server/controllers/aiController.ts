@@ -44,6 +44,14 @@ export const aiController = {
       const nluResult = processNLU(prompt, context, conversationHistory);
       const cleanedPrompt = nluResult.correctedInput || prompt;
 
+      // Attach NLU metadata to context so the LLM can use it
+      context.nluResult = {
+        intent: nluResult.intent,
+        confidence: nluResult.confidence,
+        entities: nluResult.entities,
+        executionPlan: nluResult.executionPlan
+      };
+
       await streamChatResponse(cleanedPrompt, context, res, conversationHistory, { provider, model, profile, sessionId });
     } catch (error) {
       next(error);

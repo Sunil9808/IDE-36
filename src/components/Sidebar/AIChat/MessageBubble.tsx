@@ -1,5 +1,8 @@
 import React from 'react';
 import { User, Sparkles, Clock, Coins } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ChatMessage } from '../../../types/ai.types';
 import { CodeBlock } from './CodeBlock';
 
@@ -10,30 +13,6 @@ interface MessageBubbleProps {
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   const isUser = message.role === 'user';
 
-  // Basic parser for code blocks
-  const parseContent = (content: string) => {
-    const parts = [];
-    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = codeBlockRegex.exec(content)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ type: 'text', content: content.slice(lastIndex, match.index) });
-      }
-      parts.push({ type: 'code', language: match[1] || 'text', code: match[2].trim() });
-      lastIndex = match.index + match[0].length;
-    }
-
-    if (lastIndex < content.length) {
-      parts.push({ type: 'text', content: content.slice(lastIndex) });
-    }
-
-    return parts.length > 0 ? parts : [{ type: 'text', content }];
-  };
-
-  const parsed = parseContent(message.content);
-
   return (
     <div className={`flex flex-col mb-4 ${isUser ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
       <div className={`flex max-w-[95%] ${isUser ? 'flex-row-reverse' : 'flex-row'} gap-3`}>
@@ -43,25 +22,41 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
         </div>
         
         {/* Content */}
-        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} min-w-0 flex-1`}>
+        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} min-w-0 flex-1 overflow-hidden`}>
           <div className={`w-full p-3 rounded-2xl ${isUser ? 'bg-[#2a313a] text-gray-200 rounded-tr-sm' : 'bg-transparent text-gray-300'}`}>
-            {parsed.map((part, i) => (
-              <React.Fragment key={i}>
-                {part.type === 'text' ? (
-                  <div className="whitespace-pre-wrap leading-relaxed text-[13.5px]">
-                    {part.content}
-                    {message.isStreaming && i === parsed.length - 1 && (
-                      <span className="inline-block w-2 h-4 ml-1 bg-[#47d6b6] animate-pulse align-middle" />
-                    )}
-                  </div>
-                ) : (
-                  <CodeBlock language={part.language!} code={part.code!} />
-                )}
-              </React.Fragment>
-            ))}
-            {message.isStreaming && parsed.length === 0 && (
-               <span className="inline-block w-2 h-4 bg-[#47d6b6] animate-pulse align-middle" />
-            )}
+            <div className="prose prose-invert max-w-none text-[13.5px] leading-relaxed break-words">
+              <ReactMarkdown
+                components={{
+                  code({node, inline, className, children, ...props}: any) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    // Use custom CodeBlock for block code, standard code tag for inline
+                    return !inline && match ? (
+                      <CodeBlock language={match[1]} code={String(children).replace(/\n$/, '')} />
+                    ) : !inline ? (
+                      <CodeBlock language="text" code={String(children).replace(/\n$/, '')} />
+                    ) : (
+                      <code className="bg-gray-800 rounded px-1.5 py-0.5 text-[#e2e8f0] font-mono text-[12px]" {...props}>
+                        {children}
+                      </code>
+                    )
+                  },
+                  p({children}) {
+                    return <p className="mb-2 last:mb-0">{children}</p>
+                  },
+                  ul({children}) {
+                    return <ul className="list-disc pl-4 mb-2">{children}</ul>
+                  },
+                  ol({children}) {
+                    return <ol className="list-decimal pl-4 mb-2">{children}</ol>
+                  }
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {message.isStreaming && (
+                <span className="inline-block w-2 h-4 ml-1 bg-[#47d6b6] animate-pulse align-middle" />
+              )}
+            </div>
           </div>
           
           {/* Metadata */}

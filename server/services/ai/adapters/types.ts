@@ -19,6 +19,12 @@ export interface AIContext {
   workspacePath?: string;
   recentErrors?: string[];
   terminalOutput?: string;
+  nluResult?: {
+    intent: string;
+    confidence: number;
+    entities: any;
+    executionPlan: any;
+  };
 }
 
 export interface ChatProfile {

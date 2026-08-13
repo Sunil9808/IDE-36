@@ -82,14 +82,32 @@ export function useAIChat() {
           model: currentModelId,
           provider: modelInfo?.provider,
           profile: currentProfileId,
-          sessionId: activeSessionId
+          sessionId: activeSessionId,
+          conversationHistory: useAIStore.getState().messages
+            .filter(m => m.role === 'user' || (m.role === 'assistant' && !m.isStreaming))
+            .slice(0, -1) // Exclude the current prompt we just added
+            .slice(-10)
+            .map(m => ({ role: m.role, content: m.content.slice(0, 1500) }))
         }),
         signal
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'AI request failed');
+        let errorMsg = `AI request failed (${response.status})`;
+        try {
+          const errBody = await response.text();
+          if (errBody) {
+            try {
+              const errJson = JSON.parse(errBody);
+              errorMsg = errJson.error || errJson.message || errorMsg;
+            } catch {
+              errorMsg = errBody.slice(0, 200) || errorMsg;
+            }
+          }
+        } catch {
+          // ignore read errors
+        }
+        throw new Error(errorMsg);
       }
 
       const reader = response.body?.getReader();
@@ -109,20 +127,27 @@ export function useAIChat() {
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
             if (data === '[DONE]') break;
+            
+            let parsed;
             try {
-              const parsed = JSON.parse(data);
-              if (parsed.error) {
-                throw new Error(parsed.error);
-              }
-              const text = parsed.choices?.[0]?.delta?.content || parsed.text || '';
-              if (text) {
-                appendToLastMessage(text);
-                tokenCount += Math.ceil(text.length / 4); // rough estimate
-              }
-              if (parsed.usage) {
-                tokenCount = parsed.usage.total_tokens || tokenCount;
-              }
-            } catch {}
+              parsed = JSON.parse(data);
+            } catch (e) {
+              continue; // Ignore JSON parse errors for incomplete chunks
+            }
+
+            if (parsed.error) {
+              // Throw outside the JSON parse try-catch so the outer block catches it
+              throw new Error(typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error));
+            }
+
+            const text = parsed.choices?.[0]?.delta?.content || parsed.text || '';
+            if (text) {
+              appendToLastMessage(text);
+              tokenCount += Math.ceil(text.length / 4); // rough estimate
+            }
+            if (parsed.usage) {
+              tokenCount = parsed.usage.total_tokens || tokenCount;
+            }
           }
         }
       }

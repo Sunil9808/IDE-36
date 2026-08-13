@@ -17,28 +17,57 @@ export default function Explorer() {
   const { addNotification } = useUIStore();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null);
 
-  const refreshExplorer = useCallback(async () => {
-    if (!workspace) return;
+  const refreshExplorer = useCallback(async (silent = false) => {
+    if (!workspace?.path) return;
     try {
       const tree = await fileService.getFileTree(workspace.path);
       setFileTree(tree);
-      addNotification({ type: 'success', message: 'Explorer refreshed' });
     } catch (error) {
-      addNotification({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to refresh Explorer',
-      });
+      if (!silent) {
+        addNotification({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to refresh Explorer',
+        });
+      }
     }
-  }, [workspace, setFileTree, addNotification]);
+  }, [workspace?.path, setFileTree, addNotification]);
 
+  // Refresh automatically when workspace changes
   useEffect(() => {
     const handleWorkspaceChanged = () => {
       void refreshExplorer();
     };
 
     window.addEventListener('ai-web-ide:workspace-changed', handleWorkspaceChanged);
-    return () => window.removeEventListener('ai-web-ide:workspace-changed', handleWorkspaceChanged);
-  }, [refreshExplorer]);
+    window.addEventListener('ai-web-ide:refresh-explorer', handleWorkspaceChanged);
+
+    if (workspace?.path) {
+      void refreshExplorer();
+    }
+
+    // Poll for local file system changes since we don't have backend watcher events for native handles
+    let timeoutId: any;
+    let isCancelled = false;
+    
+    const pollFileTree = async () => {
+      if (isCancelled || workspace?.type !== 'local') return;
+      await refreshExplorer(true); // silent fetch
+      if (!isCancelled) {
+        timeoutId = setTimeout(pollFileTree, 3000);
+      }
+    };
+    
+    if (workspace?.type === 'local') {
+      timeoutId = setTimeout(pollFileTree, 3000);
+    }
+    
+    return () => {
+      isCancelled = true;
+      window.removeEventListener('ai-web-ide:workspace-changed', handleWorkspaceChanged);
+      window.removeEventListener('ai-web-ide:refresh-explorer', handleWorkspaceChanged);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [workspace?.path, workspace?.type, refreshExplorer]);
 
   const createFile = async () => {
     if (!workspace) return;
@@ -214,6 +243,12 @@ export default function Explorer() {
               onContextMenu={handleContextMenu}
             />
           ))}
+
+          {fileTree.length === 0 && (
+            <div className="px-4 py-4 text-[12px] italic" style={{ color: 'var(--color-textMuted)' }}>
+              This folder is empty. Click the + icon above to create a file.
+            </div>
+          )}
         </div>
       ) : (
         <NoFolderOpened />

@@ -125,8 +125,14 @@ function getActionTarget(action: AgentAction): string {
 }
 
 export function resolveAgentActionPath(value: string, effectiveRoot: string): string {
-  const requested = value.trim();
+  let requested = value.trim();
   if (!requested) throw new Error('Path is required');
+
+  // If AI generates a path with a leading slash like "/index.html", treat it as relative to the workspace root.
+  // Otherwise path.resolve on Windows resolves it to the drive root (e.g., C:\index.html).
+  if (requested.startsWith('/') || requested.startsWith('\\')) {
+    requested = requested.substring(1);
+  }
 
   const resolved = path.resolve(effectiveRoot, requested);
   const relative = path.relative(effectiveRoot, resolved);
@@ -136,22 +142,11 @@ export function resolveAgentActionPath(value: string, effectiveRoot: string): st
 
   // Security guard: If the effectiveRoot resolves to the IDE application root,
   // we must prevent the AI from creating or modifying internal IDE application folders and configuration files.
-  const baseRoot = getWorkspaceRoot();
+  // Because we now support arbitrary local workspaces, we just ensure the user hasn't 
+  // accidentally set the IDE source tree as their workspace.
+  const baseRoot = process.cwd(); // The IDE source root
   if (path.resolve(effectiveRoot) === path.resolve(baseRoot)) {
-    const relativeNormalized = relative.replace(/\\/g, '/').toLowerCase();
-    const protectedDirs = ['src/', 'server/', 'node_modules/', 'dist/', 'dist-check/', 'public/', '.git/', '.agents/'];
-    const protectedFiles = [
-      'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.node.json',
-      'vite.config.ts', 'postcss.config.js', 'tailwind.config.js', 'index.html',
-      '.env', '.gitignore', 'readme.md'
-    ];
-
-    const isInsideProtectedDir = protectedDirs.some(dir => relativeNormalized.startsWith(dir));
-    const isProtectedFile = protectedFiles.some(file => relativeNormalized === file);
-
-    if (isInsideProtectedDir || isProtectedFile) {
-      throw new Error(`Security Exception: Cannot modify IDE application files at ${value}`);
-    }
+    throw new Error(`Security Exception: Cannot use the IDE source directory as the workspace root. Please open a different local folder.`);
   }
 
   return resolved;
@@ -178,7 +173,6 @@ function isAllowedCommand(command: string): boolean {
 
 function isLongRunningCommand(command: string): boolean {
   return [
-    /^npm\s+install(?:\s|$)/i,
     /^npm\s+run\s+dev(?::client|:server)?(?:\s|$)/i,
     /^npm\s+start(?:\s|$)/i,
   ].some((pattern) => pattern.test(command.trim()));
@@ -221,6 +215,7 @@ function extractJson(text: string): {
   actions?: AgentAction[];
   nextSteps?: string[];
   extensionRecommendations?: Array<{ extensionId: string; language: string; reason: string }>;
+  remainingFiles?: string[];
 } {
   // Try markdown fenced JSON block first
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -346,8 +341,8 @@ function slugifyProjectName(input: string): string {
 function shouldUseNewProjectScaffold(task: string): boolean {
   const normalized = task.toLowerCase().trim();
   const wordCount = normalized.split(/\s+/).length;
-  if (wordCount > 6) return false;
-  return /^(create|make|scaffold|init|new)\s+(a\s+|an\s+)?(new\s+)?(react|express|node|blank|starter|generic)\s+(project|app|application|template)$/i.test(normalized);
+  if (wordCount > 10) return false; // Allow slightly longer phrases like "create a modern ecommerce website"
+  return /\b(create|make|scaffold|init|new|build)\b.*\b(react|express|node|blank|starter|generic|project|app|application|template|website|site)\b/i.test(normalized);
 }
 
 function findProjectContainer(baseRoot: string): string | undefined {
@@ -783,7 +778,9 @@ Use this analysis to understand the user's TRUE intent. The corrected input fixe
     historySection += '\n\nUse this history to understand follow-up requests. If the user references something from a previous message, use that context.';
   }
 
-  return `You are an autonomous AI pair programmer that EXECUTES changes directly in the user's workspace.
+  return `You are an autonomous AI pair programmer that EXECUTES changes directly in the user's virtual workspace.
+You manage the user's projects, write code to displayed files, and manage the explorer panel based on user input.
+CRITICAL RESTRICTION: You must NEVER change the code in files or folders of the IDE's own source code (e.g. the AI Web IDE itself). You ONLY operate on the user's files inside their virtual workspace.
 You are NOT a chatbot. You do NOT give instructions. You WRITE CODE directly to files.
 You behave like a SENIOR SOFTWARE ENGINEER who delivers COMPLETE, PRODUCTION-READY features.
 
@@ -955,7 +952,7 @@ export async function runPairProgrammerAgent(
   try {
     parsed = shouldUseNewProjectScaffold(task)
       ? createGenericProjectScaffold(task)
-      : extractJson(await getChatCompletion(await buildAgentPrompt(task, context, effectiveRoot, nluResult, conversationHistory), context, 16000));
+      : extractJson(await getChatCompletion(await buildAgentPrompt(task, context, effectiveRoot, nluResult, conversationHistory), context, 8000));
   } catch (err) {
     // If parsing failed, retry once with strict JSON prompt
     try {
@@ -997,7 +994,7 @@ export async function runPairProgrammerAgent(
       const continuePrompt = buildContinuationPrompt(task, fullPlan, alreadyCreated, remainingFiles);
 
       try {
-        const passResult = extractJson(await getChatCompletion(continuePrompt, context, 16000));
+        const passResult = extractJson(await getChatCompletion(continuePrompt, context, 8000));
         const newActions = Array.isArray(passResult.actions) ? passResult.actions : [];
         allActions.push(...newActions);
 
@@ -1016,7 +1013,7 @@ export async function runPairProgrammerAgent(
   if (completenessWarnings.length > 0) {
     try {
       const fixPrompt = `The following files contain placeholder/stub code that must be replaced with real implementations:\n${completenessWarnings.join('\n')}\n\nRegenerate ONLY those files with COMPLETE, PRODUCTION-READY code. No TODOs, no placeholders, no stubs.\n\nReturn JSON: { "actions": [{ "type": "writeFile", "path": "...", "content": "COMPLETE code" }] }`;
-      const fixResult = extractJson(await getChatCompletion(fixPrompt, context, 16000));
+      const fixResult = extractJson(await getChatCompletion(fixPrompt, context, 8000));
       if (Array.isArray(fixResult.actions)) {
         // Replace the stub files with fixed versions
         for (const fixAction of fixResult.actions) {

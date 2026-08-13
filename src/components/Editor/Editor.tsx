@@ -11,6 +11,7 @@ import { useFileStore } from '../../store/fileStore';
 import { useUIStore } from '../../store/uiStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { fileService } from '../../services/fileService';
+import { workspaceService } from '../../services/workspaceService';
 import { FileNode } from '../../types/file.types';
 import {
   Bot,
@@ -228,26 +229,35 @@ function WelcomeEditor() {
     }));
   };
 
-  const createGeneratedWorkspace = () => {
+  const createGeneratedWorkspace = async () => {
     const projectName = window.prompt('Workspace name', 'generated-workspace')?.trim() || 'generated-workspace';
-    const basePath = `/generated/${projectName}`;
-    const appPath = `${basePath}/src/App.tsx`;
-    const tree = buildGeneratedWorkspaceTree(projectName, basePath, appPath);
-    closeAllTabs();
-    setWorkspace(createWorkspaceDescriptor(projectName, basePath));
-    setFileTree(tree);
-    openTab({
-      id: `tab-generated-app-${Date.now()}`,
-      fileId: tree[0].children?.[1]?.children?.[0]?.id || `generated-app-${Date.now()}`,
-      filePath: appPath,
-      fileName: 'App.tsx',
-      language: 'typescript',
-      content: `export default function App() {\n  return <main>Hello from ${projectName}</main>;\n}\n`,
-      isDirty: false,
-      isPreview: false,
-      cursorPosition: { line: 1, column: 1 },
-    });
-    notify(`${projectName} workspace generated`, 'success');
+    if (!projectName) return;
+    try {
+      const workspace = await workspaceService.createWorkspace(projectName);
+      const tree = await fileService.getFileTree(workspace.path);
+      closeAllTabs();
+      setWorkspace(workspace);
+      setFileTree(tree);
+      
+      const srcNode = tree.find(n => n.name === 'src');
+      const indexNode = srcNode?.children?.find(n => n.name === 'index.ts');
+      const appPath = indexNode ? indexNode.path : `${workspace.path}/src/index.ts`;
+      
+      openTab({
+        id: `tab-generated-app-${Date.now()}`,
+        fileId: indexNode ? indexNode.id : `generated-app-${Date.now()}`,
+        filePath: appPath,
+        fileName: 'index.ts',
+        language: 'typescript',
+        content: `// ${projectName} - main entry point\n\nconsole.log('Hello from ${projectName}!');\n`,
+        isDirty: false,
+        isPreview: false,
+        cursorPosition: { line: 1, column: 1 },
+      });
+      notify(`${projectName} workspace created and saved to local computer`, 'success');
+    } catch (error) {
+      notify(`Failed to create workspace: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
   };
 
   const openRecent = (name: string, path: string) => {

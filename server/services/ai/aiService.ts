@@ -9,7 +9,7 @@ export function getAIProvider(): string {
 
 export function getAIModel(): string {
   const provider = getAIProvider();
-  if (provider === 'gemini') return process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  if (provider === 'gemini') return process.env.GEMINI_MODEL || 'gemini-1.5-pro';
   if (provider === 'sambanova') return process.env.SAMBANOVA_MODEL || 'Meta-Llama-3.3-70B-Instruct';
   if (provider === 'anthropic') return process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest';
   if (provider === 'ollama') return process.env.OLLAMA_MODEL || 'llama3';
@@ -38,6 +38,10 @@ Always respond with:
 - Actionable suggestions
 - Best practices
 
+IMPORTANT INSTRUCTION REGARDING CONTEXT:
+You will be provided with the user's current active file and workspace context. 
+If the user asks a general programming question, algorithm request, or conceptual question (e.g., "write the Find-S algorithm"), DO NOT force the answer into the context of their active file. Answer it generally. Only modify or reference the active file if the user's request is clearly related to it.
+
 Current workspace context:`;
 
   if (context.workspaceName) {
@@ -63,12 +67,8 @@ Current workspace context:`;
     systemPrompt += `\n\nRecent terminal output:\n${context.terminalOutput}`;
   }
 
-  if (conversationHistory.length > 0) {
-    const recentHistory = conversationHistory.slice(-10);
-    systemPrompt += '\n\nConversation history:';
-    for (const entry of recentHistory) {
-      systemPrompt += `\n[${entry.role}]: ${entry.content.slice(0, 1500)}`;
-    }
+  if (context.nluResult) {
+    systemPrompt += `\n\n=== NLU / NLP Intent Analysis ===\n- Detected Intent: ${context.nluResult.intent}\n- Entities: ${JSON.stringify(context.nluResult.entities)}\n- Internal Execution Plan: ${JSON.stringify(context.nluResult.executionPlan)}\n\n(Follow the user's request precisely based on this deeper semantic understanding. If they asked for a general concept/algorithm, prioritize it and DO NOT force it into their active file.)`;
   }
 
   return systemPrompt;

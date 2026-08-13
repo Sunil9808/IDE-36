@@ -22,7 +22,7 @@ import { useWorkspaceStore } from '../../../store/workspaceStore';
 import { useUIStore } from '../../../store/uiStore';
 import { v4 as uuidv4 } from '../../../utils/uuid';
 
-const IDE_ROOT_CWD = 'E:\\AI-Web-IDE';
+const IDE_ROOT_CWD = '';
 
 type TerminalProfile = 'PowerShell' | 'Command Prompt' | 'Git Bash' | 'WSL' | 'Bash' | 'Node.js';
 
@@ -54,7 +54,7 @@ function resolveTerminalCwd(workspacePath?: string) {
     return workspacePath;
   }
 
-  return IDE_ROOT_CWD;
+  return workspacePath || IDE_ROOT_CWD;
 }
 
 function createTerminalInstance(cwd: string, profile: TerminalProfile = 'PowerShell', count = 1): TerminalInstance {

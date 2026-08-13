@@ -71,7 +71,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
   settings: defaultSettings,
   error: null,
 
-  selectedModel: 'gpt-4o',
+  selectedModel: '',
   selectedProfile: 'concise',
   availableModels: [],
   availableProfiles: defaultProfiles,
@@ -151,26 +151,21 @@ export const useAIStore = create<AIStore>((set, get) => ({
       const response = await fetch('/api/ai/models');
       if (response.ok) {
         const data = await response.json();
-        set({ availableModels: data.models || [] });
-      } else {
-        // Mock fallback if endpoint not available
-        set({
-          availableModels: [
-            { id: 'gpt-4o', provider: 'openai', name: 'GPT-4o', capabilities: ['chat', 'code'], maxTokens: 128000, costPer1kInput: 0.005, costPer1kOutput: 0.015, status: 'available' },
-            { id: 'claude-3-5-sonnet', provider: 'anthropic', name: 'Claude 3.5 Sonnet', capabilities: ['chat', 'code'], maxTokens: 200000, costPer1kInput: 0.003, costPer1kOutput: 0.015, status: 'available' },
-            { id: 'gemini-1.5-pro', provider: 'gemini', name: 'Gemini 1.5 Pro', capabilities: ['chat', 'code'], maxTokens: 2000000, costPer1kInput: 0.0035, costPer1kOutput: 0.0105, status: 'available' },
-            { id: 'llama-3', provider: 'local', name: 'Llama 3 (Local)', capabilities: ['chat'], maxTokens: 8192, costPer1kInput: 0, costPer1kOutput: 0, status: 'unconfigured' },
-          ]
+        const models = data.models || [];
+        
+        // Auto-select first model if current is not in available list
+        const currentSelected = get().selectedModel;
+        const isCurrentAvailable = models.some((m: any) => m.id === currentSelected);
+        
+        set({ 
+          availableModels: models,
+          ...(models.length > 0 && !isCurrentAvailable ? { selectedModel: models[0].id } : {})
         });
+      } else {
+        set({ availableModels: [] });
       }
     } catch (e) {
-      set({
-        availableModels: [
-          { id: 'gpt-4o', provider: 'openai', name: 'GPT-4o', capabilities: ['chat', 'code'], maxTokens: 128000, costPer1kInput: 0.005, costPer1kOutput: 0.015, status: 'available' },
-          { id: 'claude-3-5-sonnet', provider: 'anthropic', name: 'Claude 3.5 Sonnet', capabilities: ['chat', 'code'], maxTokens: 200000, costPer1kInput: 0.003, costPer1kOutput: 0.015, status: 'available' },
-          { id: 'gemini-1.5-pro', provider: 'gemini', name: 'Gemini 1.5 Pro', capabilities: ['chat', 'code'], maxTokens: 2000000, costPer1kInput: 0.0035, costPer1kOutput: 0.0105, status: 'available' },
-        ]
-      });
+      set({ availableModels: [] });
     }
   },
 
