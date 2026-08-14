@@ -33,7 +33,7 @@ export function useAIChat() {
     };
   }, [context, getActiveTab, workspace]);
 
-  const sendMessage = useCallback(async (prompt: string) => {
+  const sendMessage = useCallback(async (prompt: string, hiddenPromptPrefix?: string) => {
     if (!prompt.trim() || isStreaming) return;
 
     // Create a new AbortController for this request
@@ -77,7 +77,7 @@ export function useAIChat() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          prompt, 
+          prompt: hiddenPromptPrefix ? `${hiddenPromptPrefix}\n\n${prompt}` : prompt, 
           context: ctx,
           model: currentModelId,
           provider: modelInfo?.provider,

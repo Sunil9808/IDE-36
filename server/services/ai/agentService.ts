@@ -792,6 +792,7 @@ CRITICAL RULES:
 5. If the user mentions a filename (like "index.html", "script.js"), you MUST create or modify that file using writeFile.
 6. Every response MUST have at least one action. If unsure, create the files the user is most likely referring to.
 7. When modifying an existing file, ALWAYS use readFile first to get current contents, then writeFile with the full updated content.
+${context.workspaceType === 'local' ? '\n8. CRITICAL: The user is in a Native Local Workspace. DO NOT generate `runCommand` or `installDependency` actions, because terminal commands cannot be run from the browser locally. Only use file operations (writeFile, deleteFile, etc.).' : ''}
 
 COMPLETENESS RULES (MANDATORY):
 1. Every file you write must contain COMPLETE, PRODUCTION-READY code.
@@ -826,7 +827,7 @@ ${task}
 Workspace facts:
 - Root: the user's active project directory
 - Detected languages: ${detectedLangs.join(', ') || 'none detected'}
-- Existing files: ${workspaceFiles.length > 0 ? workspaceFiles.join('\\n') : '(empty workspace)'}
+- Existing files: ${workspaceFiles.length > 0 ? workspaceFiles.join('\n') : '(empty workspace)'}
 - Paths in actions are RELATIVE to the workspace root.
 - If the user requests a specific project or folder name, use that exact name at the workspace root.
 - Do not create nested folders or a different path unless the user explicitly asks for it.
@@ -1040,9 +1041,15 @@ export async function runPairProgrammerAgent(
     detectedLanguages: [],
   };
 
+  const isLocalWorkspace = context.workspaceType === 'local';
+
   for (const action of allActions) {
     try {
       if (action.type === 'listFiles') {
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: (action as { path?: string }).path || '.', success: true, output: 'Local workspace: will be handled by frontend if needed' });
+          continue;
+        }
         const target = resolveAgentActionPath((action as { path?: string }).path || '.', effectiveRoot);
         const entries = await fs.readdir(target, { withFileTypes: true });
         const output = entries
@@ -1051,6 +1058,10 @@ export async function runPairProgrammerAgent(
         result.actions.push({ type: action.type, target: (action as { path?: string }).path || '.', success: true, output });
 
       } else if (action.type === 'readFile') {
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: (action as { path: string }).path, success: true, output: 'Local workspace: will be read by frontend if needed' });
+          continue;
+        }
         const a = action as { path: string };
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         const content = await fs.readFile(target, 'utf-8');
@@ -1058,18 +1069,30 @@ export async function runPairProgrammerAgent(
 
       } else if (action.type === 'mkdir') {
         const a = action as { path: string };
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+          continue;
+        }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fsCreateDirectory(target);
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'Directory created' });
 
       } else if (action.type === 'writeFile') {
         const a = action as { path: string; content: string };
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+          continue;
+        }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fsWriteFile(target, a.content || '');
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File written' });
 
       } else if (action.type === 'appendFile') {
         const a = action as { path: string; content: string };
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+          continue;
+        }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.appendFile(target, a.content || '', 'utf-8');
@@ -1077,12 +1100,20 @@ export async function runPairProgrammerAgent(
 
       } else if (action.type === 'deleteFile') {
         const a = action as { path: string };
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+          continue;
+        }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fsDeleteFile(target);
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File deleted' });
 
       } else if (action.type === 'renameFile') {
         const a = action as { oldPath: string; newPath: string };
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'Pending UI confirmation' });
+          continue;
+        }
         const oldTarget = resolveAgentActionPath(a.oldPath, effectiveRoot);
         const newTarget = resolveAgentActionPath(a.newPath, effectiveRoot);
         await renameWorkspaceFile(oldTarget, newTarget);
@@ -1092,12 +1123,20 @@ export async function runPairProgrammerAgent(
         const a = action as { packages: string[]; dev?: boolean };
         const packages = Array.isArray(a.packages) ? a.packages.filter(Boolean) : [];
         if (packages.length === 0) throw new Error('No packages were provided');
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: packages.join(', '), success: false, output: 'Cannot run npm commands directly on local folders from browser.' });
+          continue;
+        }
         const command = `npm install ${a.dev ? '-D ' : ''}${packages.join(' ')}`;
         const output = await runWorkspaceCommand(command, effectiveRoot);
         result.actions.push({ type: action.type, target: packages.join(', '), success: true, output });
 
       } else if (action.type === 'runCommand') {
         const a = action as { command: string; cwd?: string };
+        if (isLocalWorkspace) {
+          result.actions.push({ type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: false, output: 'Cannot run terminal commands directly on local folders from browser.' });
+          continue;
+        }
         const commandRoot = a.cwd ? resolveAgentActionPath(a.cwd, effectiveRoot) : effectiveRoot;
         const output = await runWorkspaceCommand(a.command, commandRoot);
         result.actions.push({ type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: true, output });

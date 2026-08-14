@@ -17,6 +17,8 @@ export interface AIContext {
   openFiles?: Array<{ path: string; name: string; language: string }>;
   workspaceName?: string;
   workspacePath?: string;
+  workspaceType?: string;
+  fileTree?: string[];
   recentErrors?: string[];
   terminalOutput?: string;
   nluResult?: {
