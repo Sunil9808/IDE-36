@@ -289,10 +289,19 @@ export function processNLU(rawInput: string, context: AIContext, conversationHis
     }
   }
 
+  let finalCorrectedInput = correctedInput;
+  const lowerInput = finalCorrectedInput.toLowerCase();
+  
+  if (lowerInput.includes('find-s') || lowerInput.includes('find s')) {
+    finalCorrectedInput += '\n\n[SYSTEM OVERRIDE: The user is explicitly asking for the Machine Learning "Find-S" algorithm, which finds the most specific hypothesis from positive examples in a dataset. YOU MUST NOT WRITE A LINEAR SEARCH OR GENERIC STRING MATCHING ALGORITHM. WRITE ONLY THE MACHINE LEARNING ALGORITHM. IMPORTANT: You must write the code in the exact programming language the user requested. If the user did not specify a programming language, default to Python. (HINT FOR STANDARD IMPLEMENTATION: Your function should accept a full dataset. First, explicitly filter out and ignore negative examples. Initialize your hypothesis to the first positive example, then use a simple loop to iterate through the remaining positive examples, replacing differing attributes with "?"). For your example dataset, use the classic "EnjoySport" textbook dataset (Sky, AirTemp, Humidity, Wind, PlayTennis) with "Yes"/"No" target labels. INCLUDE BOTH THE FUNCTION AND THE DATASET TOGETHER IN ONE SINGLE SCRIPT FILE. Do not separate them.]';
+  } else if (lowerInput.includes('pca algo') || lowerInput.includes('svm algo') || lowerInput.includes('knn algo') || lowerInput.match(/\b(pca|svm|knn|k-means|random forest) algorithm\b/)) {
+    finalCorrectedInput += '\n\n[SYSTEM OVERRIDE: The user is asking for a Machine Learning algorithm. IMPORTANT: You must write the code in the exact programming language the user requested. If the user did not specify a programming language, default to Python as it is the industry standard for Data Science and ML.]';
+  }
+
   return {
     originalInput: rawInput,
     cleanedInput,
-    correctedInput,
+    correctedInput: finalCorrectedInput,
     intent: detectedIntent,
     confidence: intentConfidence,
     entities,

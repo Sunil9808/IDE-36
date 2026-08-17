@@ -40,7 +40,16 @@ Always respond with:
 
 IMPORTANT INSTRUCTION REGARDING CONTEXT:
 You will be provided with the user's current active file and workspace context. 
-If the user asks a general programming question, algorithm request, or conceptual question (e.g., "write the Find-S algorithm"), DO NOT force the answer into the context of their active file. Answer it generally. Only modify or reference the active file if the user's request is clearly related to it.
+If the user asks a general programming question, algorithm request, or conceptual question, DO NOT force the answer into the context of their active file. Answer it generally. (NOTE: If asked for the "Find-S" algorithm, ALWAYS write the Machine Learning algorithm for finding the most specific hypothesis from positive training data. Do NOT write a linear search or string matching algorithm). Only modify or reference the active file if the user's request is clearly related to it.
+
+INTENT INFERENCE & FORGIVENESS: 
+Like a highly intelligent senior engineer, you must actively deduce the user's true intent even if their prompt is poorly worded, has typos, uses the wrong terminology, or is grammatically incorrect. DO NOT take poorly phrased questions purely literally if a literal interpretation makes no sense. Instead, figure out what they *actually meant* to ask, and provide the correct, industry-standard solution for their underlying intent.
+
+LANGUAGE AUTO-DETECTION:
+If the user asks you to implement an algorithm or write code but does not specify a programming language:
+- For Web/UI components: Default to React/TypeScript.
+- For Machine Learning, Data Science, or heavy mathematical algorithms: ALWAYS automatically default to Python.
+- If they specify a language, respect it unconditionally.
 
 Current workspace context:`;
 
@@ -68,7 +77,7 @@ Current workspace context:`;
   }
 
   if (context.nluResult) {
-    systemPrompt += `\n\n=== NLU / NLP Intent Analysis ===\n- Detected Intent: ${context.nluResult.intent}\n- Entities: ${JSON.stringify(context.nluResult.entities)}\n- Internal Execution Plan: ${JSON.stringify(context.nluResult.executionPlan)}\n\n(Follow the user's request precisely based on this deeper semantic understanding. If they asked for a general concept/algorithm, prioritize it and DO NOT force it into their active file.)`;
+    systemPrompt += `\n\n=== NLU / NLP Intent Analysis ===\n- Detected Intent: ${context.nluResult.intent}\n- Entities: ${JSON.stringify(context.nluResult.entities)}\n- Internal Execution Plan: ${JSON.stringify(context.nluResult.executionPlan)}\n\n(CRITICAL INSTRUCTION: The NLU Intent Analysis above is internal metadata. DO NOT acknowledge it, DO NOT talk about the "detected intent" or "entities" to the user, and DO NOT ask the user to confirm the context. Just silently use this context to directly answer their prompt. If they asked for a general concept/algorithm, prioritize it and DO NOT force it into their active file.)`;
   }
 
   return systemPrompt;
@@ -83,7 +92,9 @@ export async function streamChatResponse(
   conversationHistory: ConversationEntry[] = [],
   options?: { provider?: string; model?: string; profile?: { temperature?: number; maxTokens?: number }; sessionId?: string }
 ): Promise<void> {
-  const provider = options?.provider || getAIProvider();
+  // Ignore the frontend's requested provider and ALWAYS use the single configured backend provider.
+  // This allows aggregator APIs (like OpenRouter or a proxy) to handle all models through one adapter.
+  const provider = getAIProvider();
   const model = options?.model || getAIModel();
   
   const adapter = adapterRegistry.getAdapter(provider === 'sambanova' ? 'openai' : provider);

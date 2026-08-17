@@ -4,6 +4,7 @@ export interface Workspace {
   path: string;
   createdAt: number;
   lastOpenedAt: number;
+  type?: 'local' | 'remote';
   settings: WorkspaceSettings;
   recentFiles: string[];
 }

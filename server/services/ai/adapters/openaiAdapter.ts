@@ -3,6 +3,33 @@ import { Response } from 'express';
 import { ModelAdapter, ChatRequestOptions, ModelInfo } from './types';
 import { buildSystemPrompt } from '../aiService'; // We will export this from aiService or move it
 
+function parseMultimodalContent(text: string) {
+  const regex = /!\[.*?\]\((data:image\/[^;]+;base64,[^\)]+)\)/g;
+  let match;
+  let lastIndex = 0;
+  const contentArray: any[] = [];
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      contentArray.push({ type: 'text', text: text.substring(lastIndex, match.index) });
+    }
+    contentArray.push({
+      type: 'image_url',
+      image_url: { url: match[1] }
+    });
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    contentArray.push({ type: 'text', text: text.substring(lastIndex) });
+  }
+
+  if (contentArray.length === 0) {
+    return text;
+  }
+  return contentArray;
+}
+
 export class OpenAIAdapter implements ModelAdapter {
   id = 'openai';
   name = 'OpenAI';
@@ -73,7 +100,7 @@ export class OpenAIAdapter implements ModelAdapter {
         messages: [
           { role: 'system' as const, content: systemPrompt },
           ...historyMessages,
-          { role: 'user' as const, content: prompt },
+          { role: 'user' as const, content: parseMultimodalContent(prompt) as any },
         ],
         max_tokens: profile?.maxTokens || 8192,
         temperature: profile?.temperature ?? 0.7,

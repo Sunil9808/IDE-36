@@ -25,7 +25,10 @@ type AgentAction =
   | { type: 'runCommand'; command: string; cwd?: string }
   | { type: 'installDependency'; packages: string[]; dev?: boolean }
   | { type: 'detectLanguages' }
-  | { type: 'installExtension'; extensionId: string; language?: string };
+  | { type: 'deleteFile'; path: string }
+  | { type: 'renameFile'; oldPath: string; newPath: string }
+  | { type: 'installExtension'; extensionId: string; language?: string }
+  | { type: 'askQuestion'; question: string; options: string[] };
 
 export interface AgentResult {
   summary: string;
@@ -231,30 +234,36 @@ function extractJson(text: string): {
     try {
       return JSON.parse(fixed);
     } catch {
-      // Last resort: if the LLM returned prose with code blocks instead of JSON,
-      // extract the code blocks and convert them to writeFile actions
-      const codeBlocks = [...text.matchAll(/```(\w+)?\s*\n([\s\S]*?)```/g)];
-      if (codeBlocks.length > 0) {
-        const actions: AgentAction[] = [];
-        for (const block of codeBlocks) {
-          const lang = (block[1] || 'txt').toLowerCase();
-          const content = block[2]?.trim() || '';
-          const extMap: Record<string, string> = {
-            html: 'index.html', css: 'style.css', javascript: 'script.js', js: 'script.js',
-            typescript: 'index.ts', ts: 'index.ts', python: 'main.py', py: 'main.py',
-            java: 'Main.java', json: 'data.json', yaml: 'config.yaml', yml: 'config.yaml',
-            sh: 'script.sh', bash: 'script.sh', markdown: 'README.md', md: 'README.md',
-          };
-          const fileName = extMap[lang] || `file.${lang}`;
-          actions.push({ type: 'writeFile', path: fileName, content } as any);
+      // Robust regex fallback to extract actions from broken JSON
+      const actions: AgentAction[] = [];
+      const actionMatches = [...text.matchAll(/"type"\s*:\s*"([^"]+)"\s*,\s*"path"\s*:\s*"([^"]+)"\s*,\s*"content"\s*:\s*"?\s*```\w*\s*([\s\S]*?)```/g)];
+      
+      if (actionMatches.length > 0) {
+        for (const match of actionMatches) {
+          actions.push({ type: match[1], path: match[2], content: match[3].trim() } as any);
         }
         return {
-          summary: 'Extracted code from AI response and created files',
-          plan: ['Write extracted code blocks to files'],
+          summary: 'Extracted actions via fallback parser',
+          plan: [],
           actions,
-          nextSteps: [],
+          nextSteps: []
         };
       }
+      
+      const simpleMatches = [...text.matchAll(/"type"\s*:\s*"([^"]+)"\s*,\s*"path"\s*:\s*"([^"]+)"\s*,\s*"content"\s*:\s*"([\s\S]*?)"\s*\}/g)];
+      if (simpleMatches.length > 0) {
+        for (const match of simpleMatches) {
+          actions.push({ type: match[1], path: match[2], content: match[3].replace(/\\n/g, '\n').replace(/\\"/g, '"') } as any);
+        }
+        return {
+          summary: 'Extracted actions via fallback parser (simple)',
+          plan: [],
+          actions,
+          nextSteps: []
+        };
+      }
+      
+      // If it's completely unparseable, throw so the agent can retry
       throw new Error(`Failed to parse agent JSON response: ${raw.slice(0, 200)}`);
     }
   }
@@ -339,10 +348,7 @@ function slugifyProjectName(input: string): string {
 }
 
 function shouldUseNewProjectScaffold(task: string): boolean {
-  const normalized = task.toLowerCase().trim();
-  const wordCount = normalized.split(/\s+/).length;
-  if (wordCount > 10) return false; // Allow slightly longer phrases like "create a modern ecommerce website"
-  return /\b(create|make|scaffold|init|new|build)\b.*\b(react|express|node|blank|starter|generic|project|app|application|template|website|site)\b/i.test(normalized);
+  return false; // Always use AI to generate project so it matches prompt perfectly
 }
 
 function findProjectContainer(baseRoot: string): string | undefined {
@@ -778,8 +784,19 @@ Use this analysis to understand the user's TRUE intent. The corrected input fixe
     historySection += '\n\nUse this history to understand follow-up requests. If the user references something from a previous message, use that context.';
   }
 
-  return `You are an autonomous AI pair programmer that EXECUTES changes directly in the user's virtual workspace.
-You manage the user's projects, write code to displayed files, and manage the explorer panel based on user input.
+  return `[AGENT MODE] You are a fully autonomous ReAct (Reasoning and Acting) AI coding agent that EXECUTES changes directly in the user's virtual workspace.
+Your primary lifecycle is a continuous multi-step loop:
+1. Understand the request.
+2. Search relevant files using \`listFiles\`.
+3. Read relevant files using \`readFile\`.
+4. Plan your changes.
+5. Edit files using \`writeFile\`, \`renameFile\`, or \`deleteFile\`.
+
+RULES FOR REACT LOOP:
+- DO NOT guess file contents. You must read them first using the \`readFile\` action.
+- When you output \`readFile\` or \`listFiles\` actions, DO NOT output \`writeFile\` actions in the same response. Wait for the system to execute your read/search actions. It will append the outputs to the conversation history and prompt you again.
+- Only once you have gathered all necessary information should you proceed to step 4 (Plan) and step 5 (Edit).
+
 CRITICAL RESTRICTION: You must NEVER change the code in files or folders of the IDE's own source code (e.g. the AI Web IDE itself). You ONLY operate on the user's files inside their virtual workspace.
 You are NOT a chatbot. You do NOT give instructions. You WRITE CODE directly to files.
 You behave like a SENIOR SOFTWARE ENGINEER who delivers COMPLETE, PRODUCTION-READY features.
@@ -794,6 +811,131 @@ CRITICAL RULES:
 7. When modifying an existing file, ALWAYS use readFile first to get current contents, then writeFile with the full updated content.
 ${context.workspaceType === 'local' ? '\n8. CRITICAL: The user is in a Native Local Workspace. DO NOT generate `runCommand` or `installDependency` actions, because terminal commands cannot be run from the browser locally. Only use file operations (writeFile, deleteFile, etc.).' : ''}
 
+# STRICT FOLDER AND FILE MANAGEMENT RULES
+
+You are responsible for creating and maintaining a clean, logical, production-quality folder and file structure.
+A feature is NOT considered correctly implemented if the code works but the files are poorly organized.
+The final project must be both: FUNCTIONALLY CORRECT + STRUCTURALLY CORRECT
+
+1. NEVER CREATE A FILE WITHOUT A REASON: Determine its responsibility and if an existing file can do the job.
+2. NEVER CREATE DUPLICATE FILES: Search for similar filenames/components (e.g. UserCard) before creating new ones.
+3. ONE FILE = ONE CLEAR RESPONSIBILITY: Don't put auth, DB, and UI helpers all in utils.ts.
+4. DO NOT CREATE "GOD FILES": Avoid dumping ground files like helpers.ts, utils.ts, common.ts, api.ts.
+5. DO NOT CREATE "JUNK FILES": No test.ts, temp.ts, new.ts, backup.ts.
+6. FILE NAMING MUST BE CONSISTENT: Follow existing casing (e.g., UserProfile.tsx vs user-profile.tsx).
+7. FILE EXTENSIONS: Use the correct extension (.ts, .tsx, .css). No .js in a TS project without reason.
+8. COMPONENT FILE RULES: Keep UI components in established locations. Do not automatically create hooks/, utils/ for trivial components.
+9. FEATURE FILE RULES: Keep feature-specific code (e.g. auth hooks) inside the feature folder, not global folders.
+10. SHARED FILE RULE: Only put code in shared directories (e.g. global components/) if it is GENUINELY shared.
+11. INDEX FILE RULE: Do not automatically create index.ts (barrel files) unless the project already uses them.
+12. TYPES AND INTERFACES: Search for existing types before defining new ones. Avoid duplicates like User, UserType, UserData.
+13. CONSTANTS: Do not create a constants.ts for one trivial constant.
+14. UTILITY FILES: Search for existing equivalents before creating a new utility.
+15. SERVICE/API FILES: Keep API/service logic separate from UI code when the architecture dictates.
+16. CONFIGURATION FILES: Do not modify package.json, vite.config.ts, etc., without inspecting how the project works.
+17. ENVIRONMENT FILES: Never hardcode API keys or DB credentials. Respect existing .env conventions.
+18. TEST FILES: Follow the project's existing testing convention (colocated vs centralized).
+19. FILE LOCATION DECISION: Priority: 1. Existing convention 2. Feature architecture 3. Framework convention.
+20. DO NOT MOVE FILES UNNECESSARILY: Only move if misplaced or required by existing architecture. Update all imports!
+21. DELETE UNUSED FILES: Clean up temporary or obsolete files you created during the task.
+22. FILE CONTENT BOUNDARIES: A file should not become a dumping ground. Keep responsibilities separated.
+23. IMPORT RULES: After creating/moving files, verify all imports, use aliases, remove broken ones.
+24. DIRECTORY DEPTH: Do not create excessive nesting (e.g., components/widgets/cards/statistics/...).
+25. SMALL FEATURE RULE: Do not automatically create a massive architecture (components/, hooks/, services/) for a small feature.
+26. LARGE FEATURE RULE: Do not put a massive feature into one file. Separate UI, API, state appropriately.
+27. NEW PROJECT RULE: Establish the project foundation and structure FIRST before implementing feature files.
+28. BEFORE FILE CREATION: Internally decide on files to reuse vs create vs modify.
+29. BEFORE FINISHING: Inspect the structure. Ensure no duplicates, correct directories, and clean imports.
+30. FINAL RULE: Optimize for: "The code runs, the files are correctly placed, responsibilities are clear, the structure follows the project architecture, and another developer can understand the project."
+
+# ZERO-STOP GENERATION RULES
+
+When the user asks you to build a feature (e.g., a login page), you must NEVER stop after generating only the folder structure. You must complete the entire implementation in one go.
+Follow these exact steps:
+1. First create the required project folder structure.
+2. Then automatically create every file inside its correct folder.
+3. Write the complete working code inside each file. Do not leave any file empty.
+4. Do not only show or describe the code — actually create and save the files using \`writeFile\`.
+5. Connect everything correctly (e.g., HTML linking to CSS/JS).
+6. Ensure all file paths and imports are correct.
+
+DO NOT STOP after creating the folder structure. Folder creation is only the first step. Continue automatically by creating and writing the complete code into every required file until the feature is fully implemented and ready to run.
+Only consider the task complete when both the folder structure AND all files with complete working code have been created.
+
+# FOLLOW-UP COMMANDS & MISSING FILES
+
+When a project is partially created or only the folder structure exists, understand that the following commands have the same implementation intent:
+
+- Add files       modify this also as an example
+- Create files
+- Build files
+- Generate files
+- Write files
+- Implement files
+- Complete files
+- Finish the project
+- Continue building
+- Add missing files
+- Generate missing files
+- Complete the folder structure
+- Populate the files
+- Write code into files
+- Implement the remaining project
+- Finish implementation
+- Build the remaining parts
+
+When I use any of these commands, do not only explain what should be done and do not create another folder structure.
+
+Instead:
+
+1. Inspect the currently opened project and existing folder structure.
+2. Detect which files already exist.
+3. Detect which required files are missing.
+4. Create all missing files in their correct locations.
+5. Write complete working code into every newly created file.
+6. If an existing file is empty or incomplete, complete its implementation.
+7. Do not overwrite working code unnecessarily.
+8. Maintain correct connections between HTML, CSS, JavaScript, backend, APIs, imports, and other dependencies.
+9. Continue automatically until the requested feature or project is fully implemented.
+10. Never consider the task complete just because folders exist.
+
+Important:
+Commands such as "add files", "build files", "generate files", "write to files", or similar commands should trigger actual file creation and code implementation.
+
+Always perform the action directly on the project files. Do not just display code in the chat unless I specifically ask you to show the code instead of creating the files.
+
+Before finishing, verify:
+- Required folders exist
+- Required files exist
+- Missing files have been created
+- Files contain actual implementation
+- No required file is empty
+- File paths and imports are correct
+- The feature is ready to run
+
+A project with only folders is NOT complete. Continue from the current project state and implement the missing files until the requested task is finished.
+
+### Example
+
+If the AI Pair previously created empty folders:
+login-page/
+├── css/
+└── js/
+
+Then you can simply say:
+"Complete the files"
+
+The AI Pair should inspect the existing project and output concrete JSON actions to create the missing files:
+{
+  "actions": [
+    { "type": "writeFile", "path": "login-page/index.html", "content": "<!-- HTML code -->" },
+    { "type": "writeFile", "path": "login-page/css/style.css", "content": "/* CSS code */" },
+    { "type": "writeFile", "path": "login-page/js/script.js", "content": "// JS code" }
+  ]
+}
+
+The key behavior is: your AI Pair should inspect the current project state first, then continue implementation using concrete writeFile actions instead of restarting or only generating a folder structure.
+
 COMPLETENESS RULES (MANDATORY):
 1. Every file you write must contain COMPLETE, PRODUCTION-READY code.
 2. NEVER write placeholder comments like "// TODO", "// Add logic here", "// Implement this", "/* your code here */".
@@ -805,6 +947,10 @@ COMPLETENESS RULES (MANDATORY):
 8. Include error handling, loading states, empty states, and validation in UI components.
 9. Match the existing project's coding style, framework, and architecture.
 10. Include responsive design and proper styling.
+11. CRITICAL JSON FORMATTING: When writing multiline code inside the "content" string, you MUST escape quotes/newlines OR wrap the code in markdown blocks inside the string. This helps the parser extract it if JSON fails.
+12. DOMAIN KNOWLEDGE: If asked for the "Find-S algorithm", ALWAYS write the Machine Learning Find-S algorithm for finding the most specific hypothesis from positive training examples. Do NOT write a linear search or string matching algorithm.
+13. INTENT INFERENCE: Like a highly intelligent senior engineer, actively deduce the user's true intent even if their prompt is poorly worded, has typos, uses wrong terminology, or is grammatically incorrect. Do NOT take poorly phrased questions purely literally if doing so makes no sense. Instead, figure out what they *actually meant* to build, and provide the correct, industry-standard solution for their underlying intent.
+14. LANGUAGE AUTO-DETECTION: If the user asks for a Machine Learning, Data Science, or heavy mathematical algorithm without specifying a language, automatically default to Python. For Web/UI tasks, default to React/TypeScript unless otherwise specified.
 
 FEATURE COMPLETENESS CHECKLIST:
 Before finalizing your response, verify:
@@ -817,7 +963,8 @@ Before finalizing your response, verify:
 - Imports are correct and reference actual project files
 - The code would compile without errors
 
-If you cannot fit all files in one response, include a "remainingFiles" array listing files you planned but could not generate.
+If you cannot fit all files in one response, or if the project requires many files, include a "remainingFiles" array listing the files you planned but did not include in "actions".
+CRITICAL API LIMIT: You MUST divide large projects into small chunks. Output NO MORE THAN 3 files per response. Put all other required files into the "remainingFiles" array so the system can fetch them in the next pass.
 ${nluSection}
 ${historySection}
 
@@ -829,8 +976,10 @@ Workspace facts:
 - Detected languages: ${detectedLangs.join(', ') || 'none detected'}
 - Existing files: ${workspaceFiles.length > 0 ? workspaceFiles.join('\n') : '(empty workspace)'}
 - Paths in actions are RELATIVE to the workspace root.
+- Keep the folder structure proportional to the project size. For simple components or projects (like a login page), keep related files in a single simple folder (e.g., src/components/Login/).
+- Do NOT over-engineer the architecture with 'features', 'utils', 'styles', or 'routes' folders unless explicitly requested or strictly necessary for a large full-stack application.
+- You must create the necessary directory structure using 'mkdir' actions if needed, though 'writeFile' will automatically create parent directories.
 - If the user requests a specific project or folder name, use that exact name at the workspace root.
-- Do not create nested folders or a different path unless the user explicitly asks for it.
 
 Active file context:
 ${activeFile}
@@ -844,12 +993,15 @@ Available action types:
 - mkdir: { "type": "mkdir", "path": "relative/path" }
 - writeFile: { "type": "writeFile", "path": "relative/file.ts", "content": "COMPLETE file contents here" }
 - appendFile: { "type": "appendFile", "path": "relative/file.ts", "content": "content to append" }
+- listFiles: { "type": "listFiles", "path": "src/components" }
+- readFile: { "type": "readFile", "path": "src/App.tsx" }
 - deleteFile: { "type": "deleteFile", "path": "relative/file.ts" }
 - renameFile: { "type": "renameFile", "oldPath": "old.ts", "newPath": "new.ts" }
 - installDependency: { "type": "installDependency", "packages": ["pkg"], "dev": false }
 - runCommand: { "type": "runCommand", "command": "npm run build" }
 - detectLanguages: { "type": "detectLanguages" }
 - installExtension: { "type": "installExtension", "extensionId": "ext.id", "language": "lang" }
+- askQuestion: { "type": "askQuestion", "question": "What UI framework?", "options": ["React", "Vue", "You choose for me"] }
 
 Return ONLY valid JSON:
 {
@@ -950,15 +1102,26 @@ export async function runPairProgrammerAgent(
 
   // Pass 1: Get the full plan + as many files as fit in one response
   let parsed: any;
+  let rawText = '';
   try {
-    parsed = shouldUseNewProjectScaffold(task)
-      ? createGenericProjectScaffold(task)
-      : extractJson(await getChatCompletion(await buildAgentPrompt(task, context, effectiveRoot, nluResult, conversationHistory), context, 8000));
+    if (shouldUseNewProjectScaffold(task)) {
+      parsed = createGenericProjectScaffold(task);
+    } else {
+      rawText = await getChatCompletion(await buildAgentPrompt(task, context, effectiveRoot, nluResult, conversationHistory), context, 4000);
+      parsed = extractJson(rawText);
+    }
   } catch (err) {
     // If parsing failed, retry once with strict JSON prompt
     try {
-      const retryPrompt = `The previous response could not be parsed into the required JSON shape. Return ONLY valid JSON matching this schema: {summary:string, plan:string[], actions: [{type:string, path?:string, content?:string, command?:string}], remainingFiles:string[], nextSteps:string[]}. Convert any human-readable plan into concrete actions with COMPLETE file contents. Do not include any extra text.`;
-      const retryText = await getChatCompletion(retryPrompt, context, 8000);
+      const retryPrompt = `You are a strict JSON generator. Your previous response failed to parse as valid JSON. 
+Please rewrite your response for this task, ensuring ALL quotes and newlines inside the 'content' strings are escaped properly.
+Task: ${task}
+
+Original Broken Output:
+${rawText}
+
+Return ONLY valid JSON matching this schema: {summary:string, plan:string[], actions: [{type:string, path?:string, content?:string, command?:string}], remainingFiles:string[], nextSteps:string[]}. Convert any human-readable plan into concrete actions with COMPLETE file contents. Do not include any extra text.`;
+      const retryText = await getChatCompletion(retryPrompt, context, 4000);
       parsed = extractJson(retryText);
     } catch (err2) {
       throw err;
@@ -969,7 +1132,7 @@ export async function runPairProgrammerAgent(
   if (!Array.isArray(parsed.actions) || parsed.actions.length === 0) {
     try {
       const convertPrompt = `Convert the following partial result into the full JSON schema. Partial: ${JSON.stringify(parsed)}\nReturn ONLY JSON with concrete actions (mkdir/writeFile/appendFile/runCommand/installDependency/detectLanguages/installExtension) based on the plan. Every writeFile action MUST contain COMPLETE production-ready code. No TODOs, no placeholders.`;
-      const convertText = await getChatCompletion(convertPrompt, context, 8000);
+      const convertText = await getChatCompletion(convertPrompt, context, 4000);
       const converted = extractJson(convertText);
       if (Array.isArray(converted.actions) && converted.actions.length > 0) parsed = converted;
     } catch (err3) {
@@ -986,7 +1149,9 @@ export async function runPairProgrammerAgent(
   // Multi-pass: check for remaining files and continue if needed
   const remainingFiles: string[] = Array.isArray(parsed.remainingFiles) ? parsed.remainingFiles : [];
   
-  if (remainingFiles.length > 0) {
+  const hasQuestion = allActions.some((a: any) => a.type === 'askQuestion');
+
+  if (!hasQuestion && remainingFiles.length > 0) {
     for (let pass = 2; pass <= MAX_PASSES && remainingFiles.length > 0; pass++) {
       const alreadyCreated = allActions
         .filter((a: any) => a.type === 'writeFile')
@@ -995,7 +1160,7 @@ export async function runPairProgrammerAgent(
       const continuePrompt = buildContinuationPrompt(task, fullPlan, alreadyCreated, remainingFiles);
 
       try {
-        const passResult = extractJson(await getChatCompletion(continuePrompt, context, 8000));
+        const passResult = extractJson(await getChatCompletion(continuePrompt, context, 4000));
         const newActions = Array.isArray(passResult.actions) ? passResult.actions : [];
         allActions.push(...newActions);
 
@@ -1010,11 +1175,11 @@ export async function runPairProgrammerAgent(
   }
 
   // Completeness validation — check for stubs/placeholders
-  const completenessWarnings = validateCompleteness(allActions);
+  const completenessWarnings = !hasQuestion ? validateCompleteness(allActions) : [];
   if (completenessWarnings.length > 0) {
     try {
       const fixPrompt = `The following files contain placeholder/stub code that must be replaced with real implementations:\n${completenessWarnings.join('\n')}\n\nRegenerate ONLY those files with COMPLETE, PRODUCTION-READY code. No TODOs, no placeholders, no stubs.\n\nReturn JSON: { "actions": [{ "type": "writeFile", "path": "...", "content": "COMPLETE code" }] }`;
-      const fixResult = extractJson(await getChatCompletion(fixPrompt, context, 8000));
+      const fixResult = extractJson(await getChatCompletion(fixPrompt, context, 4000));
       if (Array.isArray(fixResult.actions)) {
         // Replace the stub files with fixed versions
         for (const fixAction of fixResult.actions) {

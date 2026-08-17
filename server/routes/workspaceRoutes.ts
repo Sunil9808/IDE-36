@@ -3,7 +3,6 @@ import path from 'path';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkspaceRoot, setWorkspaceRoot } from '../utils/workspaceRoot';
-import path from 'path';
 import os from 'os';
 
 const router = Router();

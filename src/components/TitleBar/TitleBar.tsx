@@ -416,7 +416,16 @@ export default function TitleBar() {
         path: `/${workspaceName}`, // Virtual path for UI purposes
         type: 'local', 
         createdAt: Date.now(), 
-        lastOpenedAt: Date.now() 
+        lastOpenedAt: Date.now(),
+        settings: {
+          theme: 'dark',
+          fontSize: 14,
+          tabSize: 2,
+          formatOnSave: true,
+          aiEnabled: true,
+          terminalShell: 'bash'
+        },
+        recentFiles: []
       }, dirHandle);
       
       notify(`Workspace opened: ${workspaceName}`, 'success');

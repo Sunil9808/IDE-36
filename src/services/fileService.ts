@@ -33,14 +33,34 @@ async function resolveHandle(rootHandle: any, fullPath: string, isFile: boolean,
   const parts = relPath.split(/[\\/]/).filter(Boolean);
   let current = rootHandle;
 
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (i === parts.length - 1 && isFile) {
-      return await current.getFileHandle(part, { create });
+  let failingPart = '';
+  try {
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      failingPart = part;
+      if (i === parts.length - 1 && isFile) {
+        return await current.getFileHandle(part, { create });
+      }
+      let nextHandle;
+      try {
+        nextHandle = await current.getDirectoryHandle(part, { create });
+      } catch (err: any) {
+        if (err.name === 'NotFoundError' && create) {
+          // Chrome File System API bug: if a folder was recently deleted on the OS side, 
+          // Chrome's cache gets out of sync and throws NotFoundError even when create: true.
+          // Waiting briefly or re-requesting sometimes forces a cache refresh.
+          await new Promise(r => setTimeout(r, 100));
+          nextHandle = await current.getDirectoryHandle(part, { create });
+        } else {
+          throw err;
+        }
+      }
+      current = nextHandle;
     }
-    current = await current.getDirectoryHandle(part, { create });
+    return current;
+  } catch (err: any) {
+    throw new Error(`[resolveHandle Error] path: '${fullPath}', workspace: '${workspacePath}', rel: '${relPath}', parts: ${JSON.stringify(parts)}, failed on part '${failingPart}': ${err.name} - ${err.message}`);
   }
-  return current;
 }
 
 // Helper to build file tree recursively from a directory handle
@@ -106,7 +126,7 @@ export const fileService = {
       const fileHandle = await resolveHandle(handle, filePath, true);
       const file = await fileHandle.getFile();
       const content = await file.text();
-      return { content, encoding: 'utf-8' };
+      return { content, encoding: 'utf8' };
     }
     const { data } = await axios.get(`${BASE_URL}/files/read`, {
       params: { path: filePath },
@@ -117,11 +137,20 @@ export const fileService = {
   async writeFile(filePath: string, content: string): Promise<void> {
     const handle = getDirHandle();
     if (handle) {
-      const fileHandle = await resolveHandle(handle, filePath, true, true);
-      const writable = await fileHandle.createWritable();
-      await writable.write(content);
-      await writable.close();
-      return;
+      let fileHandle;
+      try {
+        fileHandle = await resolveHandle(handle, filePath, true, true);
+      } catch (e: any) {
+        throw new Error(`[writeFile.resolve] ${filePath}: ${e.name} - ${e.message}`);
+      }
+      try {
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        return;
+      } catch (e: any) {
+        throw new Error(`[writeFile.write] ${filePath}: ${e.name} - ${e.message}`);
+      }
     }
     await axios.post(`${BASE_URL}/files/write`, { path: filePath, content });
   },
@@ -156,15 +185,19 @@ export const fileService = {
   async createFolder(folderPath: string): Promise<FileNode> {
     const handle = getDirHandle();
     if (handle) {
-      const dirHandle = await resolveHandle(handle, folderPath, false, true);
-      const name = dirHandle.name;
-      return {
-        id: generateId(folderPath).replace(/=/g, ''),
-        name,
-        path: folderPath,
-        type: 'directory',
-        children: [],
-      };
+      try {
+        const dirHandle = await resolveHandle(handle, folderPath, false, true);
+        const name = dirHandle.name;
+        return {
+          id: generateId(folderPath).replace(/=/g, ''),
+          name,
+          path: folderPath,
+          type: 'directory',
+          children: [],
+        };
+      } catch (e: any) {
+        throw new Error(`[createFolder] ${folderPath}: ${e.name} - ${e.message}`);
+      }
     }
     const { data } = await axios.post(`${BASE_URL}/files/create`, {
       path: folderPath,

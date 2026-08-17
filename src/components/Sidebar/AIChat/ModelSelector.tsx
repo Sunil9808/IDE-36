@@ -21,43 +21,46 @@ export const ModelSelector: React.FC = () => {
   };
 
   return (
-    <div className="relative z-10 w-full mb-2">
+    <div className="relative shrink-0">
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-[#1e2329] hover:bg-[#252b32] border border-gray-700/50 rounded-lg text-sm text-gray-200 transition-colors"
+        className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] rounded-md transition-colors"
+        title="Switch Model"
       >
-        <div className="flex items-center gap-2">
-          {selected && getProviderIcon(selected.provider)}
-          <span className="font-medium">{selected ? selected.name : 'Select a Model'}</span>
-        </div>
-        <ChevronDown size={14} className="text-gray-400" />
+        <span className="font-medium truncate max-w-[120px]">
+          {selected ? selected.name : 'Select Model'}
+        </span>
+        <ChevronDown size={14} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 w-full mt-1 bg-[#1e2329] border border-gray-700/50 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute bottom-full left-0 mb-2 w-48 bg-[var(--bg-1)] border border-[var(--border-0)] rounded-lg shadow-lg overflow-hidden flex flex-col z-50 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
           {providers.map(provider => (
             <div key={provider}>
-              <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#151b20]">
+              <div className="px-3 py-2 text-xs font-semibold text-[var(--text-2)] border-b border-[var(--border-0)] bg-[var(--bg-2)]/50 uppercase tracking-wider">
                 {provider}
               </div>
               {availableModels.filter(m => m.provider === provider).map(model => (
                 <button
                   key={model.id}
                   onClick={() => { setSelectedModel(model.id); setIsOpen(false); }}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#252b32] transition-colors ${selectedModel === model.id ? 'bg-[#2a313a]' : ''}`}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 text-sm transition-colors w-full text-left ${selectedModel === model.id ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)]'}`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 truncate">
                     {getProviderIcon(provider)}
-                    <span className={selectedModel === model.id ? 'text-blue-400 font-medium' : 'text-gray-300'}>
+                    <span className="truncate">
                       {model.name}
                     </span>
                   </div>
-                  {selectedModel === model.id && <Check size={14} className="text-blue-400" />}
+                  {selectedModel === model.id && <Check size={14} />}
                 </button>
               ))}
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
