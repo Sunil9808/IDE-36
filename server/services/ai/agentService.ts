@@ -1182,14 +1182,36 @@ export async function runStreamingPairProgrammerAgent(
       const { streamChatResponse } = await import('./aiService');
       await streamChatResponse(prompt, context, fakeRes as any, conversationHistory);
       rawText = accumulated;
+    } catch (err) {
+      // If the LLM throws (e.g. timeout), we still want to try and salvage the accumulated text!
+      rawText = accumulated;
+    }
+
+    try {
       parsed = extractJson(rawText);
       res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: 'plan', target: 'architecture', status: 'success' })}\n\n`);
     } catch (err) {
-      res.write(`data: ${JSON.stringify({ type: 'tool_error', tool: 'plan', target: 'architecture', error: 'Failed to generate plan' })}\n\n`);
-      throw err;
+      // Stream was likely cut off mid-JSON. Use extreme fallback parsing.
+      res.write(`data: ${JSON.stringify({ type: 'tool_error', tool: 'plan', target: 'architecture', error: 'Plan was cut off, salvaging files...' })}\n\n`);
+      parsed = { summary: 'Salvaged partial generation', actions: [] };
+      
+      const fileBlocks = rawText.split(/"type"\s*:\s*"writeFile"/);
+      for (let i = 1; i < fileBlocks.length; i++) {
+        const block = fileBlocks[i];
+        const pathMatch = block.match(/"path"\s*:\s*"([^"]+)"/);
+        const contentMatch = block.match(/"content"\s*:\s*"?([\s\S]*)/); // Capture everything after content
+        
+        if (pathMatch && contentMatch) {
+          let content = contentMatch[1];
+          // Try to clean up trailing JSON artifacts
+          const endQuoteIdx = content.lastIndexOf('"}');
+          if (endQuoteIdx > 0) content = content.slice(0, endQuoteIdx);
+          
+          parsed.actions.push({ type: 'writeFile', path: pathMatch[1], content: content.replace(/\\n/g, '\n').replace(/\\"/g, '"') });
+        }
+      }
     }
   }
-
   // Completeness pass omitted for streaming brevity, but we can do a simple final validation
   const fullPlan = Array.isArray(parsed.plan) ? parsed.plan : [];
   const summary = parsed.summary || 'Agent task completed.';
