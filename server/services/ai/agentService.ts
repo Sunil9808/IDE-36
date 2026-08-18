@@ -1031,6 +1031,7 @@ Available action types:
 - mkdir: { "type": "mkdir", "path": "relative/path" }
 - writeFile: { "type": "writeFile", "path": "relative/file.ts", "content": "COMPLETE file contents here" }
 - appendFile: { "type": "appendFile", "path": "relative/file.ts", "content": "content to append" }
+- replaceText: { "type": "replaceText", "path": "relative/file.ts", "targetContent": "exact old text to replace", "content": "new text" }
 - listFiles: { "type": "listFiles", "path": "src/components" }
 - readFile: { "type": "readFile", "path": "src/App.tsx" }
 - deleteFile: { "type": "deleteFile", "path": "relative/file.ts" }
@@ -1056,7 +1057,56 @@ Return ONLY valid JSON:
 
 REMEMBER: You are an EXECUTOR, not an advisor. Write the code. Create the files. Do it now.
 Every file must contain COMPLETE production code. No TODOs, no stubs, no placeholders.
-Use relative paths only. Do not include destructive commands. If a file must be changed, provide the complete replacement content for writeFile.`;
+Use relative paths only. Do not include destructive commands. If a file must be changed, provide the complete replacement content for writeFile.
+
+# Improve AI Pair Agent Code Quality and Performance
+
+The Agent must produce **correct, clean, minimal, production-quality code** and perform operations efficiently.
+The Agent must not blindly generate code and immediately write it into files without understanding context.
+
+Use this workflow:
+1. Understand Request
+2. Inspect Only Relevant Context
+3. Plan Minimal Changes
+4. Generate Code
+5. Validate Code
+6. Apply Changes
+7. Verify Project
+
+## 1. Fix Poor Code Generation
+- Identify the exact component/function to modify.
+- Modify only required sections. Preserve existing code.
+- Validate imports and syntax before writing.
+- Do not generate generic template code that ignores the existing project.
+
+## 2. Use Targeted Context Instead of Reading Everything
+- Stop reading files once sufficient context is available.
+- Limit context exploration to exactly what is needed for the requested change.
+
+## 3. Implement a Context Budget
+- Maximum initial files to inspect: 5-10
+- Stop exploration when relevant implementation is found.
+
+## 4. Use a Plan Before Writing
+- Create a minimal plan array in the JSON response before listing actions.
+
+## 5. Batch Independent Operations
+- Batch independent file writes in a single JSON response when possible.
+
+## 6. Use Patch-Based File Editing
+- Use targeted operations (like \`replaceText\`) instead of \`writeFile\` (which rewrites the full file) when making small modifications to an existing file.
+- This reduces broken code, lost existing code, token usage, and execution time.
+
+## 7. Validate Before Writing
+- Check syntax, imports, duplicate functions, type errors, and missing dependencies.
+
+## 8. Adaptive Task Complexity
+- Simple: Minimal context -> Direct patch -> Quick verification.
+- Medium: Relevant files -> Small plan -> Implement -> Verify.
+- Complex: Architecture analysis -> Dependency analysis -> Incremental implementation -> Verification.
+
+**Critical Rule:** Do not optimize for doing more actions. Optimize for making the fewest correct actions.
+Prefer **Correct + targeted + fast** over **Large + generic + slow**.`;
 }
 
 // ── Completeness validation ──────────────────────────────────────────────────

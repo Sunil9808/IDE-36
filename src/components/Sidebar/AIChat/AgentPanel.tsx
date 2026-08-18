@@ -325,6 +325,17 @@ Instructions:
            } catch { }
            currentTransaction.push({ path: actionPath, type: 'modify', oldContent, newContent: oldContent + (action.content || '') });
            await fileService.writeFile(absolutePath, oldContent + (action.content || ''));
+        } else if (action.type === 'replaceText') {
+           const absolutePath = `${workspacePath}/${actionPath}`;
+           let oldContent = '';
+           try {
+             oldContent = (await fileService.readFile(absolutePath)).content;
+           } catch { }
+           const newContent = oldContent.replace(action.targetContent || '', action.content || '');
+           currentTransaction.push({ path: actionPath, type: 'modify', oldContent, newContent });
+           await fileService.writeFile(absolutePath, newContent);
+           action.type = 'writeFile'; // So ChangeCard renders it correctly
+           action.content = newContent;
         } else if (action.type === 'askQuestion') {
           // Pause execution and ask the user
           setPendingQuestion({
