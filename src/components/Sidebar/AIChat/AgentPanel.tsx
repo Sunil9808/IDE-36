@@ -14,6 +14,7 @@ import { fileService } from '../../../services/fileService';
 import { useUIStore } from '../../../store/uiStore';
 import { DiffEditor } from '@monaco-editor/react';
 import * as Diff from 'diff';
+import { aiService } from '../../../services/aiService';
 import { ModelSelector } from './ModelSelector';
 
 interface Action {
@@ -107,7 +108,6 @@ export function AgentPanel({ mode = 'agent', onModeChange }: AgentPanelProps) {
   const [pendingQuestion, setPendingQuestion] = useState<{question: string, options: string[]} | null>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const { aiService } = require('../../../services/aiService');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   
