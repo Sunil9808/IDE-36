@@ -1170,7 +1170,9 @@ export async function runStreamingPairProgrammerAgent(
           } catch {}
         }
       },
-      end: () => {}
+      end: () => {},
+      setHeader: () => {},
+      flushHeaders: () => {}
     };
 
     res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: 'analyze', target: 'project', status: 'success' })}\n\n`);
