@@ -107,6 +107,51 @@ export const aiService = {
     return this.sendMessage(prompt, context);
   },
 
+  async runAgentTask(
+    task: string,
+    context: AIContext,
+    conversationHistory: any[],
+    onEvent: (event: any) => void
+  ): Promise<any> {
+    const response = await fetch(`${BASE_URL}/agent/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task, context, conversationHistory }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Agent task failed' }));
+      throw new Error(err.error || 'Agent task failed');
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    if (!reader) throw new Error('No response body');
+
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      let lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6).trim();
+          if (dataStr === '[DONE]') continue;
+          try {
+            const event = JSON.parse(dataStr);
+            onEvent(event);
+          } catch (e) {
+            // Ignored JSON parse errors for partial chunks if any
+          }
+        }
+      }
+    }
+  },
+
   buildContextString(context: AIContext): string {
     let ctx = '';
     if (context.workspaceName) ctx += `Workspace: ${context.workspaceName}\n`;

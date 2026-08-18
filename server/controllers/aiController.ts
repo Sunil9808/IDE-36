@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { streamChatResponse, getChatCompletion, getInlineCompletion, AIContext } from '../services/ai/aiService';
-import { runPairProgrammerAgent, autoDetectAndRecommendExtensions } from '../services/ai/agentService';
+import { runPairProgrammerAgent, runStreamingPairProgrammerAgent, autoDetectAndRecommendExtensions } from '../services/ai/agentService';
 import { processNLU, ConversationEntry } from '../services/ai/nluService';
 import { adapterRegistry } from '../services/ai/adapterRegistry';
 
@@ -103,6 +103,49 @@ export const aiController = {
       res.json(result);
     } catch (error) {
       next(error);
+    }
+  },
+
+  async agentStream(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { task, context = {}, conversationHistory = [] } = req.body as {
+        task: string;
+        context: AIContext;
+        conversationHistory: ConversationEntry[];
+      };
+
+      if (!task || typeof task !== 'string') {
+        res.status(400).json({ error: 'task is required and must be a string' });
+        return;
+      }
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      // Run NLU pipeline (local, <5ms)
+      const nluResult = processNLU(task, context, conversationHistory);
+
+      // Clarification — return question without executing any actions
+      if (nluResult.needsClarification) {
+        res.write(`data: ${JSON.stringify({ type: 'clarification', message: nluResult.clarificationMessage || 'Could you provide more details?', nluResult })}\n\n`);
+        res.end();
+        return;
+      }
+
+      if (nluResult.isDestructive) {
+        res.write("data: " + JSON.stringify({ type: 'confirmation_required', message: `⚠️ This will ${nluResult.intent} files. Please confirm.`, plan: nluResult.executionPlan, nluResult }) + "\n\n");
+        res.end();
+        return;
+      }
+
+      await runStreamingPairProgrammerAgent(task, context, conversationHistory, nluResult, res);
+      res.end();
+    } catch (error) {
+      console.error('Agent stream error:', error);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: (error as any).message || 'Internal server error' })}\n\n`);
+      res.end();
     }
   },
 

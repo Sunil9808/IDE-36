@@ -12,6 +12,8 @@ import { useWorkspaceStore } from '../../../store/workspaceStore';
 import { useFileStore } from '../../../store/fileStore';
 import { fileService } from '../../../services/fileService';
 import { useUIStore } from '../../../store/uiStore';
+import { DiffEditor } from '@monaco-editor/react';
+import * as Diff from 'diff';
 import { ModelSelector } from './ModelSelector';
 
 interface Action {
@@ -23,6 +25,68 @@ interface Action {
 interface AgentPanelProps {
   mode?: 'edit' | 'debug' | 'agent';
   onModeChange?: (mode: 'chat' | 'edit' | 'debug' | 'agent') => void;
+}
+
+function ChangeCard({ action, workspacePath }: { action: any, workspacePath: string }) {
+  const [diffStats, setDiffStats] = useState<{added: number, removed: number} | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [oldContent, setOldContent] = useState<string>('');
+
+  React.useEffect(() => {
+    if (action.type !== 'writeFile' && action.type !== 'appendFile') return;
+    const fetchOld = async () => {
+      try {
+        const absolutePath = `${workspacePath}/${(action.path || action.target || '').replace(/^[\\/]+/, '')}`;
+        const file = await fileService.readFile(absolutePath);
+        setOldContent(file.content);
+        if (action.content) {
+          const d = Diff.diffLines(file.content, action.type === 'appendFile' ? file.content + action.content : action.content);
+          let added = 0; let removed = 0;
+          d.forEach(part => { if (part.added) added += part.count || 0; if (part.removed) removed += part.count || 0; });
+          setDiffStats({ added, removed });
+        }
+      } catch {
+        // New file
+        if (action.content) {
+          const lines = action.content.split('\n').length;
+          setDiffStats({ added: lines, removed: 0 });
+        }
+      }
+    };
+    fetchOld();
+  }, [action, workspacePath]);
+
+  return (
+    <div className="mt-2 border border-[var(--border-0)] rounded-md overflow-hidden bg-[var(--bg-0)]">
+      <div 
+        className="flex items-center justify-between px-3 py-2 text-xs cursor-pointer hover:bg-[var(--bg-1)] transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-2">
+          <FileCode size={14} className="text-[var(--text-2)]" />
+          <span className="font-mono text-[var(--text-1)]">{action.path || action.target}</span>
+        </div>
+        {diffStats && (
+          <div className="flex items-center gap-3 font-mono text-[10px]">
+            {diffStats.added > 0 && <span className="text-[var(--success)]">+{diffStats.added}</span>}
+            {diffStats.removed > 0 && <span className="text-[var(--error)]">-{diffStats.removed}</span>}
+            <span className="text-[var(--text-3)]">{expanded ? '▲' : '▼'}</span>
+          </div>
+        )}
+      </div>
+      {expanded && action.content && (
+        <div className="h-[200px] border-t border-[var(--border-0)]">
+          <DiffEditor
+            original={oldContent}
+            modified={action.type === 'appendFile' ? oldContent + action.content : action.content}
+            language={action.path?.split('.').pop() || 'javascript'}
+            theme="vs-dark"
+            options={{ readOnly: true, minimap: { enabled: false }, renderSideBySide: false }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AgentPanel({ mode = 'agent', onModeChange }: AgentPanelProps) {
@@ -41,6 +105,9 @@ export function AgentPanel({ mode = 'agent', onModeChange }: AgentPanelProps) {
   const [conversationHistory, setConversationHistory] = useState<any[]>([]);
   const [historyList, setHistoryList] = useState<{task: string, plan: any, isApplied: boolean}[]>([]);
   const [pendingQuestion, setPendingQuestion] = useState<{question: string, options: string[]} | null>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const { aiService } = require('../../../services/aiService');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -161,34 +228,39 @@ Instructions:
 2. Provide a detailed plan of files to create or modify.`;
       }
 
-      const response = await fetch('/api/ai/agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          task: fullTask, 
-          context, 
-          provider: mode, 
-          model: mode,
-          conversationHistory 
-        })
+      setEvents([]);
+      let finalData = null;
+
+      await aiService.runAgentTask(fullTask, context, conversationHistory, (event: any) => {
+        if (event.type === 'agent_result') {
+          finalData = event.result;
+          setPlan(event.result);
+        } else {
+          setEvents(prev => {
+            // Update existing tool event or add new
+            if (event.type === 'tool_complete' || event.type === 'tool_error') {
+              const existingIndex = prev.findIndex(e => e.tool === event.tool && e.target === event.target && e.type === 'tool_start');
+              if (existingIndex >= 0) {
+                const updated = [...prev];
+                updated[existingIndex] = { ...updated[existingIndex], ...event };
+                return updated;
+              }
+            }
+            return [...prev, event];
+          });
+        }
       });
       
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Backend Error (${response.status}): ${errText}`);
-      }
-      
-      const data = await response.json();
-      setPlan(data);
-      
-      if (workspace?.type !== 'local') {
-        // Backend executed the files synchronously
-        setIsApplied(true);
-        window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
-        setTask('');
-      } else {
-        // Automatically apply the plan
-        await handleApply(data);
+      if (finalData) {
+        if (workspace?.type !== 'local') {
+          // Backend executed the files synchronously
+          setIsApplied(true);
+          window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
+          setTask('');
+        } else {
+          // Automatically apply the plan
+          await handleApply(finalData);
+        }
       }
     } catch (e: any) {
       console.error(e);
@@ -209,6 +281,8 @@ Instructions:
     try {
       const workspacePath = workspace.path;
       const readOutputs: string[] = [];
+      const currentTransaction: any[] = [];
+
       for (let i = 0; i < planData.actions.length; i++) {
         const action = planData.actions[i];
         if (!action.success) continue;
@@ -220,25 +294,37 @@ Instructions:
 
         if (action.type === 'writeFile') {
           const absolutePath = `${workspacePath}/${actionPath}`;
+          let oldContent = null;
+          try {
+            oldContent = (await fileService.readFile(absolutePath)).content;
+          } catch { }
+          currentTransaction.push({ path: actionPath, type: oldContent === null ? 'create' : 'modify', oldContent, newContent: action.content });
           await fileService.writeFile(absolutePath, action.content || '');
         } else if (action.type === 'mkdir') {
           const absolutePath = `${workspacePath}/${actionPath}`;
+          currentTransaction.push({ path: actionPath, type: 'mkdir' });
           await fileService.createFolder(absolutePath);
         } else if (action.type === 'deleteFile') {
           const absolutePath = `${workspacePath}/${actionPath}`;
+          let oldContent = null;
+          try {
+            oldContent = (await fileService.readFile(absolutePath)).content;
+          } catch { }
+          currentTransaction.push({ path: actionPath, type: 'delete', oldContent });
           await fileService.deleteFile(absolutePath);
         } else if (action.type === 'renameFile') {
           const absoluteOld = `${workspacePath}/${(action.oldPath || '').replace(/^[\\/]+/, '')}`;
           const absoluteNew = `${workspacePath}/${(action.newPath || '').replace(/^[\\/]+/, '')}`;
+          currentTransaction.push({ path: action.oldPath, newPath: action.newPath, type: 'rename' });
           await fileService.renameFile(absoluteOld, absoluteNew);
         } else if (action.type === 'appendFile') {
            const absolutePath = `${workspacePath}/${actionPath}`;
+           let oldContent = '';
            try {
-             const existing = await fileService.readFile(absolutePath);
-             await fileService.writeFile(absolutePath, existing.content + (action.content || ''));
-           } catch {
-             await fileService.writeFile(absolutePath, action.content || '');
-           }
+             oldContent = (await fileService.readFile(absolutePath)).content;
+           } catch { }
+           currentTransaction.push({ path: actionPath, type: 'modify', oldContent, newContent: oldContent + (action.content || '') });
+           await fileService.writeFile(absolutePath, oldContent + (action.content || ''));
         } else if (action.type === 'askQuestion') {
           // Pause execution and ask the user
           setPendingQuestion({
@@ -267,6 +353,8 @@ Instructions:
         }
       }
       
+      setTransactions(prev => [...prev, { id: Date.now(), plan: planData, changes: currentTransaction }]);
+
       if (readOutputs.length > 0) {
         const toolOutputStr = readOutputs.join('\n\n');
         const newHistory = [
@@ -340,7 +428,44 @@ Instructions:
           </div>
         )}
 
-        {isPlanning && (
+        {events.length > 0 && (
+          <div className="flex justify-start mb-6">
+            <div className="bg-[var(--bg-1)] border border-[var(--border-0)] p-4 rounded-2xl rounded-tl-sm w-full shadow-sm">
+              <h4 className="text-xs font-semibold text-[var(--text-2)] uppercase tracking-wider mb-3">Live Execution</h4>
+              <div className="flex flex-col gap-3">
+                {events.map((ev, idx) => {
+                  if (ev.type === 'tool_start' || ev.type === 'tool_complete' || ev.type === 'tool_error') {
+                    const isDone = ev.type === 'tool_complete';
+                    const isError = ev.type === 'tool_error';
+                    const isCurrent = ev.type === 'tool_start';
+                    // De-duplicate: only show the latest state of a tool/target combination
+                    // Actually, we already updated them in place in the state array above
+                    return (
+                      <div key={idx} className={`flex items-start gap-2 text-sm transition-all ${isCurrent ? 'opacity-100' : 'opacity-70'}`}>
+                        {isCurrent ? (
+                          <Loader2 size={16} className="mt-0.5 text-[var(--accent)] shrink-0 animate-spin" />
+                        ) : isError ? (
+                          <AlertTriangle size={16} className="mt-0.5 text-[var(--error)] shrink-0" />
+                        ) : (
+                          <CheckCircle size={16} className="mt-0.5 text-[var(--success)] shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className={`font-medium ${isCurrent ? 'text-[var(--accent)]' : 'text-[var(--text-1)]'}`}>
+                            {ev.message || (isDone ? `Completed ${ev.target}` : `Working on ${ev.target}...`)}
+                          </div>
+                          {isError && ev.error && <div className="text-xs text-[var(--error)] mt-1">{ev.error}</div>}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {isPlanning && events.length === 0 && (
           <div className="flex justify-start mb-6">
             <div className="bg-[var(--bg-1)] border border-[var(--border-0)] px-4 py-3 rounded-2xl rounded-tl-sm max-w-[85%] shadow-sm flex items-center gap-3 text-sm text-[var(--text-1)]">
               <Loader2 size={16} className="animate-spin text-[var(--accent)] shrink-0" />
@@ -365,7 +490,40 @@ Instructions:
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{plan.actions?.length || 0} files changed</span>
                       {isApplied ? (
-                        <span className="text-[var(--success)] flex items-center gap-1"><CheckCircle size={12}/> Applied</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[var(--success)] flex items-center gap-1"><CheckCircle size={12}/> Applied</span>
+                          {transactions.length > 0 && transactions[transactions.length - 1].plan === plan && (
+                            <button 
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const lastTx = transactions[transactions.length - 1];
+                                if (!lastTx) return;
+                                try {
+                                  // Revert changes in reverse order
+                                  for (let i = lastTx.changes.length - 1; i >= 0; i--) {
+                                    const change = lastTx.changes[i];
+                                    const absolutePath = `${workspace?.path}/${change.path}`;
+                                    if (change.type === 'create' || change.type === 'mkdir') {
+                                      await fileService.deleteFile(absolutePath);
+                                    } else if (change.type === 'modify' || change.type === 'delete') {
+                                      await fileService.writeFile(absolutePath, change.oldContent || '');
+                                    } else if (change.type === 'rename') {
+                                      await fileService.renameFile(`${workspace?.path}/${change.newPath}`, `${workspace?.path}/${change.path}`);
+                                    }
+                                  }
+                                  setTransactions(prev => prev.slice(0, -1));
+                                  addNotification('Changes reverted successfully', 'success');
+                                  window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
+                                } catch (err) {
+                                  addNotification('Failed to revert some changes', 'error');
+                                }
+                              }}
+                              className="text-[var(--accent)] hover:underline ml-2"
+                            >
+                              Undo
+                            </button>
+                          )}
+                        </div>
                       ) : isApplying ? (
                         <span className="text-[var(--accent)] flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Working...</span>
                       ) : null}
@@ -386,22 +544,27 @@ Instructions:
                         const isDone = (currentActionIndex !== null && i < currentActionIndex) || isApplied;
                         
                         return (
-                          <div key={i} className={`flex items-start gap-2 text-sm p-2 rounded-md transition-all ${isCurrent ? 'bg-[var(--bg-0)] border border-[var(--accent)] shadow-sm' : 'bg-transparent'}`}>
-                            {isCurrent ? (
-                              <Loader2 size={14} className="mt-0.5 text-[var(--accent)] shrink-0 animate-spin" />
-                            ) : isDone ? (
-                              <CheckCircle size={14} className="mt-0.5 text-[var(--success)] shrink-0" />
-                            ) : (
-                              <CircleDashed size={14} className="mt-0.5 text-[var(--text-3)] shrink-0" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className={`font-medium ${isCurrent ? 'text-[var(--accent)]' : 'text-[var(--text-1)]'}`}>
-                                {a.type} {a.type === 'deleteFile' && <span className="text-[var(--error)] text-xs ml-1">(Delete)</span>}
-                              </div>
-                              <div className="text-xs text-[var(--text-2)] font-mono truncate mt-0.5">
-                                {a.path || a.target || a.command || (a.oldPath ? `${a.oldPath} -> ${a.newPath}` : '')}
+                          <div key={i} className={`flex flex-col text-sm p-2 rounded-md transition-all ${isCurrent ? 'bg-[var(--bg-0)] border border-[var(--accent)] shadow-sm' : 'bg-transparent'}`}>
+                            <div className="flex items-start gap-2">
+                              {isCurrent ? (
+                                <Loader2 size={14} className="mt-0.5 text-[var(--accent)] shrink-0 animate-spin" />
+                              ) : isDone ? (
+                                <CheckCircle size={14} className="mt-0.5 text-[var(--success)] shrink-0" />
+                              ) : (
+                                <CircleDashed size={14} className="mt-0.5 text-[var(--text-3)] shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className={`font-medium ${isCurrent ? 'text-[var(--accent)]' : 'text-[var(--text-1)]'}`}>
+                                  {a.type} {a.type === 'deleteFile' && <span className="text-[var(--error)] text-xs ml-1">(Delete)</span>}
+                                </div>
+                                <div className="text-xs text-[var(--text-2)] font-mono truncate mt-0.5">
+                                  {a.path || a.target || a.command || (a.oldPath ? `${a.oldPath} -> ${a.newPath}` : '')}
+                                </div>
                               </div>
                             </div>
+                            {isDone && (a.type === 'writeFile' || a.type === 'appendFile') && workspace?.path && (
+                              <ChangeCard action={a} workspacePath={workspace.path} />
+                            )}
                           </div>
                         );
                       })}
