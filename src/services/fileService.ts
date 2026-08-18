@@ -48,8 +48,10 @@ async function resolveHandle(rootHandle: any, fullPath: string, isFile: boolean,
         if (err.name === 'NotFoundError' && create) {
           // Chrome File System API bug: if a folder was recently deleted on the OS side, 
           // Chrome's cache gets out of sync and throws NotFoundError even when create: true.
-          // Waiting briefly or re-requesting sometimes forces a cache refresh.
-          await new Promise(r => setTimeout(r, 100));
+          // Forcing an iteration over the directory's entries clears the stale cache.
+          for await (const _ of (current as any).values()) { /* ignore */ }
+          
+          await new Promise(r => setTimeout(r, 50));
           nextHandle = await current.getDirectoryHandle(part, { create });
         } else {
           throw err;

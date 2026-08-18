@@ -236,11 +236,23 @@ function extractJson(text: string): {
     } catch {
       // Robust regex fallback to extract actions from broken JSON
       const actions: AgentAction[] = [];
-      const actionMatches = [...text.matchAll(/"type"\s*:\s*"([^"]+)"\s*,\s*"path"\s*:\s*"([^"]+)"\s*,\s*"content"\s*:\s*"?\s*```\w*\s*([\s\S]*?)```/g)];
+      
+      // Matches both markdown-wrapped content and raw unescaped content
+      // Looks for "type", "path", and "content", then captures everything until the next action object or array end
+      const actionMatches = [...text.matchAll(/"type"\s*:\s*"([^"]+)"\s*,\s*(?:(?:target|"path")\s*:\s*"([^"]+)"\s*,\s*)?"content"\s*:\s*(?:["']?\s*```\w*\s*)?([\s\S]*?)(?:```\s*["']?\s*)?(?=\s*\}\s*,|\s*\}\s*\]|\s*\}\s*\})/g)];
       
       if (actionMatches.length > 0) {
         for (const match of actionMatches) {
-          actions.push({ type: match[1], path: match[2], content: match[3].trim() } as any);
+          const type = match[1];
+          const path = match[2] || '';
+          let content = match[3];
+          
+          // Remove leading/trailing quotes if the LLM accidentally added them but didn't escape inner quotes
+          if (content.startsWith('"') && !content.startsWith('""')) {
+            content = content.replace(/^"/, '').replace(/"$/, '');
+          }
+          
+          actions.push({ type, path, content: content.trim() } as any);
         }
         return {
           summary: 'Extracted actions via fallback parser',
@@ -756,10 +768,28 @@ async function buildAgentPrompt(task: string, context: AIContext, effectiveRoot:
   const activeFile = context.currentFile
     ? `Active file: ${context.currentFile.path}\nLanguage: ${context.currentFile.language}\n\n${context.currentFile.content.slice(0, 12000)}`
     : 'No active file was provided.';
-  const workspaceFiles = await listWorkspaceFiles(effectiveRoot);
-  const packageJson = await readOptionalFile('package.json', effectiveRoot, 6000);
-  const serverPackageJson = await readOptionalFile('server/package.json', effectiveRoot, 4000);
-  const detectedLangs = await detectWorkspaceLanguages(effectiveRoot);
+  let workspaceFiles: string[] = [];
+  let detectedLangs: string[] = [];
+  let packageJson = '';
+  let serverPackageJson = '';
+
+  if (context.workspaceType === 'local' && Array.isArray(context.fileTree)) {
+    // Direct access from API call proper folder structure
+    workspaceFiles = context.fileTree;
+    const exts = new Set(workspaceFiles.map(f => typeof f === 'string' ? f.split('.').pop()?.toLowerCase() : ''));
+    if (exts.has('ts') || exts.has('tsx')) detectedLangs.push('TypeScript');
+    if (exts.has('js') || exts.has('jsx')) detectedLangs.push('JavaScript');
+    if (exts.has('py')) detectedLangs.push('Python');
+    if (exts.has('java')) detectedLangs.push('Java');
+    if (exts.has('html')) detectedLangs.push('HTML');
+    if (exts.has('css')) detectedLangs.push('CSS');
+    // Cannot read package.json natively from backend for local workspace without a tool call
+  } else {
+    workspaceFiles = await listWorkspaceFiles(effectiveRoot);
+    packageJson = await readOptionalFile('package.json', effectiveRoot, 6000);
+    serverPackageJson = await readOptionalFile('server/package.json', effectiveRoot, 4000);
+    detectedLangs = await detectWorkspaceLanguages(effectiveRoot);
+  }
 
   let nluSection = '';
   if (nluResult) {
@@ -947,7 +977,7 @@ COMPLETENESS RULES (MANDATORY):
 8. Include error handling, loading states, empty states, and validation in UI components.
 9. Match the existing project's coding style, framework, and architecture.
 10. Include responsive design and proper styling.
-11. CRITICAL JSON FORMATTING: When writing multiline code inside the "content" string, you MUST escape quotes/newlines OR wrap the code in markdown blocks inside the string. This helps the parser extract it if JSON fails.
+11. CRITICAL JSON FORMATTING: You MUST escape all newlines as \\n and quotes as \\" inside the "content" string. Do not use raw newlines inside JSON strings.
 12. DOMAIN KNOWLEDGE: If asked for the "Find-S algorithm", ALWAYS write the Machine Learning Find-S algorithm for finding the most specific hypothesis from positive training examples. Do NOT write a linear search or string matching algorithm.
 13. INTENT INFERENCE: Like a highly intelligent senior engineer, actively deduce the user's true intent even if their prompt is poorly worded, has typos, uses wrong terminology, or is grammatically incorrect. Do NOT take poorly phrased questions purely literally if doing so makes no sense. Instead, figure out what they *actually meant* to build, and provide the correct, industry-standard solution for their underlying intent.
 14. LANGUAGE AUTO-DETECTION: If the user asks for a Machine Learning, Data Science, or heavy mathematical algorithm without specifying a language, automatically default to Python. For Web/UI tasks, default to React/TypeScript unless otherwise specified.
@@ -975,9 +1005,11 @@ Workspace facts:
 - Root: the user's active project directory
 - Detected languages: ${detectedLangs.join(', ') || 'none detected'}
 - Existing files: ${workspaceFiles.length > 0 ? workspaceFiles.join('\n') : '(empty workspace)'}
+- CRITICAL RULE: Always trust the "Existing files" list above. If the workspace is empty or missing files, it means your previous actions failed or the user deleted them. You MUST recreate the files from scratch. DO NOT assume files exist just because you output them in the conversation history!
 - Paths in actions are RELATIVE to the workspace root.
-- Keep the folder structure proportional to the project size. For simple components or projects (like a login page), keep related files in a single simple folder (e.g., src/components/Login/).
-- Do NOT over-engineer the architecture with 'features', 'utils', 'styles', or 'routes' folders unless explicitly requested or strictly necessary for a large full-stack application.
+- Keep the folder structure proportional to the project size. For simple components or projects (like a login page or todo list), keep related files in a single simple folder.
+- STRICT RULE AGAINST OVER-ENGINEERING: For simple apps, NEVER create deeply nested architectures like 'api/controllers', 'api/models', or 'api/services'. Keep backend logic in a single 'server.js' file.
+- Avoid creating stray source files at the root (like 'script.js' or 'style.css'). Frontend assets must go inside 'public/' or 'src/'.
 - You must create the necessary directory structure using 'mkdir' actions if needed, though 'writeFile' will automatically create parent directories.
 - If the user requests a specific project or folder name, use that exact name at the workspace root.
 
@@ -1113,14 +1145,12 @@ export async function runPairProgrammerAgent(
   } catch (err) {
     // If parsing failed, retry once with strict JSON prompt
     try {
-      const retryPrompt = `You are a strict JSON generator. Your previous response failed to parse as valid JSON. 
-Please rewrite your response for this task, ensuring ALL quotes and newlines inside the 'content' strings are escaped properly.
+      const retryPrompt = `You are a strict JSON generator. Your previous response failed to parse as valid JSON because of raw newlines or unescaped quotes inside the "content" strings.
+Please rewrite your response for this task. 
+CRITICAL: You MUST escape ALL newlines as \\n and ALL double-quotes as \\" inside the "content" strings. Do NOT use raw newlines inside JSON strings.
 Task: ${task}
 
-Original Broken Output:
-${rawText}
-
-Return ONLY valid JSON matching this schema: {summary:string, plan:string[], actions: [{type:string, path?:string, content?:string, command?:string}], remainingFiles:string[], nextSteps:string[]}. Convert any human-readable plan into concrete actions with COMPLETE file contents. Do not include any extra text.`;
+Return ONLY valid JSON matching this schema: {summary:string, plan:string[], actions: [{type:string, path?:string, content?:string, command?:string}], remainingFiles:string[], nextSteps:string[]}. Every writeFile action MUST contain COMPLETE file contents. Do not include any extra text outside the JSON.`;
       const retryText = await getChatCompletion(retryPrompt, context, 4000);
       parsed = extractJson(retryText);
     } catch (err2) {
