@@ -1259,6 +1259,9 @@ export async function runStreamingPairProgrammerAgent(
           if (dataStr === '[DONE]') return;
           try {
             const parsedChunk = JSON.parse(dataStr);
+            if (parsedChunk.error) {
+              throw new Error(parsedChunk.error);
+            }
             const text = parsedChunk.choices?.[0]?.delta?.content || '';
             if (text) {
               accumulated += text;
@@ -1276,8 +1279,14 @@ export async function runStreamingPairProgrammerAgent(
                 }
               }
             }
-          } catch {}
+          } catch (e: any) {
+            if (e.message && dataStr.includes('"error"')) {
+              // If it's the specific error we threw from parsedChunk.error, re-throw it so streamChatResponse fails!
+              throw e;
+            }
+          }
         }
+
       },
       end: () => {},
       setHeader: () => {},
