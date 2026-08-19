@@ -1,12 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Play, FileCode, CheckCircle, CircleDashed, Loader2, AlertTriangle, Check, Paperclip, Plus, Image, AtSign, Zap, Globe, MessageCircle, Edit2, Bug, Bot, ChevronUp } from 'lucide-react';
 
-const modes = [
-  { id: 'chat', label: 'Chat', icon: MessageCircle },
-  { id: 'edit', label: 'Edit', icon: Edit2 },
-  { id: 'agent', label: 'Agent', icon: Bot },
-  { id: 'debug', label: 'Debug', icon: Bug },
-] as const;
 import { useEditorStore } from '../../../store/editorStore';
 import { useWorkspaceStore } from '../../../store/workspaceStore';
 import { useFileStore } from '../../../store/fileStore';
@@ -23,10 +17,7 @@ interface Action {
   command?: string;
   content?: string;
 }
-interface AgentPanelProps {
-  mode?: 'edit' | 'debug' | 'agent';
-  onModeChange?: (mode: 'chat' | 'edit' | 'debug' | 'agent') => void;
-}
+interface AgentPanelProps {}
 
 function ChangeCard({ action, workspacePath }: { action: any, workspacePath: string }) {
   const [diffStats, setDiffStats] = useState<{added: number, removed: number} | null>(null);
@@ -90,7 +81,7 @@ function ChangeCard({ action, workspacePath }: { action: any, workspacePath: str
   );
 }
 
-export function AgentPanel({ mode = 'agent', onModeChange }: AgentPanelProps) {
+export function AgentPanel({}: AgentPanelProps) {
   const [task, setTask] = useState('');
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
@@ -98,7 +89,6 @@ export function AgentPanel({ mode = 'agent', onModeChange }: AgentPanelProps) {
   const [applyError, setApplyError] = useState<string | null>(null);
   const [plan, setPlan] = useState<any>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [submittedTask, setSubmittedTask] = useState('');
   const [showActions, setShowActions] = useState(false);
   const [currentActionIndex, setCurrentActionIndex] = useState<number | null>(null);
@@ -209,24 +199,6 @@ export function AgentPanel({ mode = 'agent', onModeChange }: AgentPanelProps) {
       };
 
       let fullTask = task;
-      if (mode === 'edit') {
-        fullTask = `[EDIT MODE] Focus exclusively on modifying the currently active file or user selection based on the prompt. Do not scaffold new projects. Task: ${task}`;
-      } else if (mode === 'debug') {
-        fullTask = `[DEBUG MODE] You are an expert at finding and fixing problems.
-Task: ${task}
-Instructions:
-1. Analyze the provided context, errors, and task to detect syntax or logical problems.
-2. Trace the root cause across related files, APIs, or configurations.
-3. Explain the problem clearly (What went wrong, why, and how it can be fixed).
-4. Propose a precise fix with required code changes and affected files.
-5. Do not make unrelated changes.`;
-      } else {
-        fullTask = `[AGENT MODE] You are a fully autonomous agent capable of handling anything from scaffolding complete projects (creating files, folders, APIs, generating entire features) to executing complex multi-step modifications. 
-Task: ${task}
-Instructions:
-1. Plan the architecture and generate complete code for new features if asked to build.
-2. Provide a detailed plan of files to create or modify.`;
-      }
 
       setEvents([]);
       let finalData = null;
@@ -523,10 +495,10 @@ Instructions:
                                     }
                                   }
                                   setTransactions(prev => prev.slice(0, -1));
-                                  addNotification('Changes reverted successfully', 'success');
+                                  addNotification({ message: 'Changes reverted successfully', type: 'success' });
                                   window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
                                 } catch (err) {
-                                  addNotification('Failed to revert some changes', 'error');
+                                  addNotification({ message: 'Failed to revert some changes', type: 'error' });
                                 }
                               }}
                               className="text-[var(--accent)] hover:underline ml-2"
@@ -624,14 +596,14 @@ Instructions:
 
       <div className="flex-shrink-0 mt-4 pt-4 border-t border-[var(--border-0)]">
         <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--accent)' }}>
-          {mode === 'edit' ? 'Edit Instructions' : mode === 'debug' ? 'Bug / Error Info' : 'Agent Task'}
+          AI Pair
         </label>
         <div className="relative flex flex-col bg-[var(--bg-0)] border border-[var(--border-1)] rounded-xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-sm">
           <input type="file" ref={fileInputRef} onChange={handleFileAttach} className="hidden" />
           
           <textarea
             className={`w-full bg-transparent text-sm p-3 resize-none min-h-[80px] outline-none custom-scrollbar ${(!workspace || workspace.type !== 'local') ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder={mode === 'edit' ? "Describe how to modify the current file or selected code..." : mode === 'debug' ? "Paste an error or describe a bug..." : "Describe a complex task to build or execute..."}
+            placeholder="Ask anything or tell me what you want to build or change..."
             value={task}
             onChange={(e) => setTask(e.target.value)}
             onKeyDown={(e) => {
@@ -694,35 +666,6 @@ Instructions:
               
               <ModelSelector />
               
-              <div className="relative shrink-0">
-                <button 
-                  onClick={() => setShowModeMenu(!showModeMenu)}
-                  className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] rounded-md transition-colors"
-                  title="Switch Mode"
-                >
-                  {modes.find(m => m.id === mode)?.label || 'Agent'} <ChevronUp size={14} />
-                </button>
-                
-                {showModeMenu && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowModeMenu(false)} />
-                    <div className="absolute bottom-full left-0 mb-2 w-32 bg-[var(--bg-1)] border border-[var(--border-0)] rounded-lg shadow-lg overflow-hidden flex flex-col z-50 animate-in fade-in zoom-in-95 duration-200">
-                      {modes.map(m => {
-                        const Icon = m.icon;
-                        return (
-                          <button
-                            key={m.id}
-                            onClick={() => { onModeChange?.(m.id); setShowModeMenu(false); }}
-                            className={`flex items-center gap-2 px-3 py-2.5 text-sm transition-colors w-full text-left ${mode === m.id ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)]'}`}
-                          >
-                            <Icon size={14} /> {m.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
             
             {/* Right side placeholder if needed */}
