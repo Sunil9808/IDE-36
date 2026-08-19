@@ -1003,7 +1003,7 @@ Workspace facts:
 - Detected languages: ${detectedLangs.join(', ') || 'none detected'}
 - Existing files: ${workspaceFiles.length > 0 ? workspaceFiles.join('\n') : '(empty workspace)'}
 - CRITICAL RULE: Always trust the "Existing files" list above. If the workspace is empty or missing files, it means your previous actions failed or the user deleted them. You MUST recreate the files from scratch. DO NOT assume files exist just because you output them in the conversation history!
-- Paths in actions are RELATIVE to the workspace root.
+- EXACT FILE PATHS: Paths in actions are RELATIVE to the workspace root. You MUST use the exact path shown in the "Existing files" list. If there are multiple files with the same name (e.g., `index.html` and `subfolder/index.html`), you MUST specify the exact directory path to avoid writing code to the wrong file!
 - INCREMENTAL PROJECT BUILDING & EVOLUTION: Treat every project as a continuously evolving system. Do NOT generate the complete future architecture at the beginning unless explicitly required.
   * ALWAYS work from the CURRENT project state (check "Existing files").
   * Compare the new requirement with the existing implementation. Determine the minimum correct set of changes required.
@@ -1073,7 +1073,8 @@ Use this workflow:
 - Identify the exact component/function to modify.
 - Modify only required sections. Preserve existing code.
 - Validate imports and syntax before writing.
-- Do not generate generic template code that ignores the existing project.
+- **NEVER generate generic template code.** Write strong, robust, and highly specific code that directly solves the user's request.
+- **NEVER write unrelated code.** Only write code that belongs in the specific file you are targeting (e.g., do not write backend logic in a frontend CSS file).
 
 ## 2. Use Targeted Context Instead of Reading Everything
 - Stop reading files once sufficient context is available.
