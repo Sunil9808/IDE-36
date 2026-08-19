@@ -265,15 +265,19 @@ export function AgentPanel({}: AgentPanelProps) {
         if (actionPath.startsWith('./')) actionPath = actionPath.substring(2);
         if (!actionPath) continue;
 
-        if (action.type === 'writeFile') {
-          const absolutePath = `${workspacePath}/${actionPath}`;
-          let oldContent = null;
-          try {
-            oldContent = (await fileService.readFile(absolutePath)).content;
-          } catch { }
-          currentTransaction.push({ path: actionPath, type: oldContent === null ? 'create' : 'modify', oldContent, newContent: action.content });
-          await fileService.writeFile(absolutePath, action.content || '');
-        } else if (action.type === 'mkdir') {
+          if (action.type === 'writeFile' || action.type === 'appendFile') {
+            const absolutePath = `${workspacePath}/${actionPath}`;
+            let oldContent = null;
+            try {
+              oldContent = (await fileService.readFile(absolutePath)).content;
+            } catch { }
+            currentTransaction.push({ path: actionPath, type: oldContent === null ? 'create' : 'modify', oldContent, newContent: action.content });
+            await fileService.writeFile(absolutePath, action.type === 'appendFile' ? ((oldContent || '') + (action.content || '')) : (action.content || ''));
+          } else if (action.type === 'createFile') {
+            const absolutePath = `${workspacePath}/${actionPath}`;
+            currentTransaction.push({ path: actionPath, type: 'create', oldContent: null, newContent: '' });
+            await fileService.writeFile(absolutePath, '');
+          } else if (action.type === 'mkdir') {
           const absolutePath = `${workspacePath}/${actionPath}`;
           currentTransaction.push({ path: actionPath, type: 'mkdir' });
           await fileService.createFolder(absolutePath);
