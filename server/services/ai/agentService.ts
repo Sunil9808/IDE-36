@@ -873,7 +873,7 @@ The final project must be both: FUNCTIONALLY CORRECT + STRUCTURALLY CORRECT
 26. LARGE FEATURE RULE: Do not put a massive feature into one file. Separate UI, API, state appropriately.
 27. NEW PROJECT RULE: Establish the project foundation and structure FIRST before implementing feature files.
 28. BEFORE FILE CREATION: Internally decide on files to reuse vs create vs modify.
-29. CROSS-FILE CONNECTION RULE: When generating multiple related files (e.g., HTML, CSS, JS), you MUST explicitly connect them! Your HTML file MUST contain `<link rel="stylesheet" href="style.css">` and `<script src="script.js"></script>`. Do not generate disconnected files that don't load each other!
+29. CROSS-FILE CONNECTION RULE: When generating multiple related files (e.g., HTML, CSS, JS), you MUST explicitly connect them! Your HTML file MUST contain '<link rel="stylesheet" href="style.css">' and '<script src="script.js"></script>'. Do not generate disconnected files that don't load each other!
 30. BEFORE FINISHING: Inspect the structure. Ensure no duplicates, correct directories, and clean imports.
 31. FINAL RULE: Optimize for: "The code runs, the files are correctly placed, responsibilities are clear, the structure follows the project architecture, and another developer can understand the project."
 
@@ -1004,7 +1004,7 @@ Workspace facts:
 - Detected languages: ${detectedLangs.join(', ') || 'none detected'}
 - Existing files: ${workspaceFiles.length > 0 ? workspaceFiles.join('\n') : '(empty workspace)'}
 - CRITICAL RULE: Always trust the "Existing files" list above. If the workspace is empty or missing files, it means your previous actions failed or the user deleted them. You MUST recreate the files from scratch. DO NOT assume files exist just because you output them in the conversation history!
-- EXACT FILE PATHS: Paths in actions are RELATIVE to the workspace root. You MUST use the exact path shown in the "Existing files" list. If there are multiple files with the same name (e.g., `index.html` and `subfolder/index.html`), you MUST specify the exact directory path to avoid writing code to the wrong file!
+- EXACT FILE PATHS: Paths in actions are RELATIVE to the workspace root. You MUST use the exact path shown in the "Existing files" list. If there are multiple files with the same name (e.g., 'index.html' and 'subfolder/index.html'), you MUST specify the exact directory path to avoid writing code to the wrong file!
 - INCREMENTAL PROJECT BUILDING & EVOLUTION: Treat every project as a continuously evolving system. Do NOT generate the complete future architecture at the beginning unless explicitly required.
   * ALWAYS work from the CURRENT project state (check "Existing files").
   * Compare the new requirement with the existing implementation. Determine the minimum correct set of changes required.
@@ -1161,7 +1161,7 @@ A task is **NOT complete** when folders and files are created. A task is complet
 **Folder creation is not project completion.**
 **File creation is not code generation.**
 
-For every project or feature request, you must continue working after creating the folder structure and files. You must WRITE the code into the files using `writeFile`. Never stop at just creating the files.
+For every project or feature request, you must continue working after creating the folder structure and files. You must WRITE the code into the files using 'writeFile'. Never stop at just creating the files.
 
 ## Final Rule
 **What does the user want, what context is needed, and what is the smallest correct action required to complete it?**
