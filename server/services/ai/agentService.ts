@@ -873,8 +873,9 @@ The final project must be both: FUNCTIONALLY CORRECT + STRUCTURALLY CORRECT
 26. LARGE FEATURE RULE: Do not put a massive feature into one file. Separate UI, API, state appropriately.
 27. NEW PROJECT RULE: Establish the project foundation and structure FIRST before implementing feature files.
 28. BEFORE FILE CREATION: Internally decide on files to reuse vs create vs modify.
-29. BEFORE FINISHING: Inspect the structure. Ensure no duplicates, correct directories, and clean imports.
-30. FINAL RULE: Optimize for: "The code runs, the files are correctly placed, responsibilities are clear, the structure follows the project architecture, and another developer can understand the project."
+29. CROSS-FILE CONNECTION RULE: When generating multiple related files (e.g., HTML, CSS, JS), you MUST explicitly connect them! Your HTML file MUST contain `<link rel="stylesheet" href="style.css">` and `<script src="script.js"></script>`. Do not generate disconnected files that don't load each other!
+30. BEFORE FINISHING: Inspect the structure. Ensure no duplicates, correct directories, and clean imports.
+31. FINAL RULE: Optimize for: "The code runs, the files are correctly placed, responsibilities are clear, the structure follows the project architecture, and another developer can understand the project."
 
 # ZERO-STOP GENERATION RULES
 
