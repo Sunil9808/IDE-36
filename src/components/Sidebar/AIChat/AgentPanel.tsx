@@ -334,7 +334,6 @@ export function AgentPanel({}: AgentPanelProps) {
            } catch {
              readOutputs.push(`Directory: ${actionPath}\nError: Could not list files.`);
            }
-        }
          } else if (action.type === 'runCommand') {
            // Emulate starting a background task
            setRunningTasks(prev => [...prev, { id: Date.now().toString(), command: action.command }]);
