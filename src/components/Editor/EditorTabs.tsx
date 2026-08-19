@@ -53,27 +53,91 @@ export default function EditorTabs() {
         );
       })}
 
-      {/* Live Preview toggle — HTML only */}
-      {tabs.find(t => t.id === activeTabId)?.language === 'html' && (
-        <div className="ml-auto flex items-center pr-3 h-full flex-shrink-0">
-          <button
-            aria-label="Toggle live preview"
-            onClick={() => setSplitConfig({ enabled: !splitConfig.enabled, direction: 'vertical' })}
-            className="ide-btn ide-btn-secondary"
-            style={{
-              height: 24,
-              fontSize: 12,
-              padding: '0 10px',
-              background: splitConfig.enabled ? 'var(--accent)' : 'transparent',
-              color: splitConfig.enabled ? 'white' : 'var(--text-1)',
-              borderColor: splitConfig.enabled ? 'var(--accent)' : 'var(--border-1)',
-            }}
-          >
-            <LayoutTemplate size={13} />
-            {splitConfig.enabled ? 'Close Preview' : 'Live Preview'}
-          </button>
-        </div>
-      )}
+      {/* Right Side Buttons */}
+      <div className="ml-auto flex items-center gap-2 pr-3 h-full flex-shrink-0">
+        <RunButton activeTabId={activeTabId} />
+
+        {/* Live Preview toggle — HTML only */}
+        {tabs.find(t => t.id === activeTabId)?.language === 'html' && (
+            <button
+              aria-label="Toggle live preview"
+              onClick={() => setSplitConfig({ enabled: !splitConfig.enabled, direction: 'vertical' })}
+              className="ide-btn ide-btn-secondary"
+              style={{
+                height: 24,
+                fontSize: 12,
+                padding: '0 10px',
+                background: splitConfig.enabled ? 'var(--accent)' : 'transparent',
+                color: splitConfig.enabled ? 'white' : 'var(--text-1)',
+                borderColor: splitConfig.enabled ? 'var(--accent)' : 'var(--border-1)',
+              }}
+            >
+              <LayoutTemplate size={13} />
+              {splitConfig.enabled ? 'Close Preview' : 'Live Preview'}
+            </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+import { Play, Square, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { executionService, ExecutionState } from '../../services/executionService';
+
+function RunButton({ activeTabId }: { activeTabId: string | null }) {
+  const { tabs } = useEditorStore();
+  const activeTab = tabs.find(t => t.id === activeTabId);
+  const [state, setState] = useState<ExecutionState>('idle');
+
+  useEffect(() => {
+    if (!activeTab?.filePath) return;
+    const current = executionService.getState(activeTab.filePath);
+    setState(current);
+    
+    const handler = (s: ExecutionState) => setState(s);
+    executionService.subscribe(activeTab.filePath, handler);
+    return () => executionService.unsubscribe(activeTab.filePath);
+  }, [activeTab?.filePath]);
+
+  if (!activeTab) return null;
+
+  const isFramework = executionService.isFrameworkFile(activeTab.fileName);
+  const lang = executionService.detectLanguage(activeTab.fileName);
+  
+  if (!isFramework && !lang) return null; // Unsupported
+
+  const handleRun = () => {
+    if (state === 'running') {
+      executionService.stop(activeTab.filePath);
+    } else {
+      executionService.runFile(activeTab.filePath, activeTab.content || '');
+    }
+  };
+
+  const label = isFramework ? 'Run Project' : 'Run';
+
+  return (
+    <button
+      onClick={handleRun}
+      className={`ide-btn flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors ${
+        state === 'running' 
+          ? 'bg-[var(--error)] hover:bg-[var(--error)]/90 text-white border-transparent' 
+          : 'bg-[#10b981] hover:bg-[#10b981]/90 text-white border-transparent'
+      }`}
+      style={{ height: 24 }}
+    >
+      {state === 'running' ? (
+        <>
+          <Square size={11} fill="currentColor" />
+          <span>Stop</span>
+        </>
+      ) : (
+        <>
+          <Play size={12} fill="currentColor" />
+          <span>{label}</span>
+        </>
+      )}
+    </button>
   );
 }
