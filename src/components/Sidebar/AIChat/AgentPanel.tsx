@@ -98,6 +98,7 @@ export function AgentPanel({}: AgentPanelProps) {
   const [pendingQuestion, setPendingQuestion] = useState<{question: string, options: string[]} | null>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [runningTasks, setRunningTasks] = useState<{id: string, command: string}[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -334,6 +335,10 @@ export function AgentPanel({}: AgentPanelProps) {
              readOutputs.push(`Directory: ${actionPath}\nError: Could not list files.`);
            }
         }
+         } else if (action.type === 'runCommand') {
+           // Emulate starting a background task
+           setRunningTasks(prev => [...prev, { id: Date.now().toString(), command: action.command }]);
+         }
       }
       
       setTransactions(prev => [...prev, { id: Date.now(), plan: planData, changes: currentTransaction }]);
@@ -594,7 +599,36 @@ export function AgentPanel({}: AgentPanelProps) {
         )}
       </div>
 
-      <div className="flex-shrink-0 mt-4 pt-4 border-t border-[var(--border-0)]">
+      {runningTasks.length > 0 && (
+        <div className="flex-shrink-0 mb-3 px-1">
+          <div className="bg-[var(--bg-0)] border border-[var(--border-1)] rounded-xl overflow-hidden shadow-sm transition-all">
+            <button 
+              className="w-full flex items-center justify-between p-3 text-sm font-medium text-[var(--text-1)] hover:bg-[var(--bg-2)] transition-colors"
+              onClick={() => {}}
+            >
+              <span>{runningTasks.length} task{runningTasks.length > 1 ? 's' : ''} running</span>
+              <ChevronUp size={16} className="text-[var(--text-2)]" />
+            </button>
+            <div className="border-t border-[var(--border-0)] p-2">
+              {runningTasks.map(task => (
+                <div key={task.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-1)] group">
+                  <Loader2 size={14} className="text-[var(--accent)] animate-spin shrink-0" />
+                  <span className="font-mono text-xs text-[var(--text-0)] flex-1 truncate">{task.command}</span>
+                  <button 
+                    onClick={() => setRunningTasks(prev => prev.filter(t => t.id !== task.id))}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--bg-2)] rounded text-[var(--error)] transition-all"
+                    title="Kill task"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-shrink-0 mt-2 pt-4 border-t border-[var(--border-0)]">
         <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--accent)' }}>
           AI Pair
         </label>
