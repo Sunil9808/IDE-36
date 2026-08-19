@@ -1260,6 +1260,13 @@ export async function runStreamingPairProgrammerAgent(
           parsed.actions.push({ type: 'writeFile', path: pathMatch[1], content: content.replace(/\\n/g, '\n').replace(/\\"/g, '"') });
         }
       }
+      
+      // Automatically prompt the user to continue since the generation was cut off!
+      parsed.actions.push({ 
+        type: 'askQuestion', 
+        question: '⚠️ I hit the AI output token limit because this project is massive! I salvaged the files I wrote so far. Would you like me to continue generating the rest of the project?', 
+        options: ['Continue generating', 'Stop here'] 
+      });
     }
   }
   // Completeness pass omitted for streaming brevity, but we can do a simple final validation
