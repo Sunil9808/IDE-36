@@ -310,6 +310,61 @@ ${suffix ? `\nCode AFTER selection:\n${suffix.slice(0, 1500)}` : ''}`;
     }
   },
 
+  async autocomplete(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { prefix = '', suffix = '', language = 'plaintext', context = {} } = req.body as {
+        prefix: string;
+        suffix: string;
+        language: string;
+        context: AIContext;
+      };
+
+      const prompt = `You are a code completion engine (IntelliSense) for a code editor.
+The user just triggered autocomplete at the cursor. Provide a JSON array of up to 5 highly relevant completion suggestions for the current context.
+
+Language: ${language}
+
+Code BEFORE cursor:
+${prefix.slice(-1000)}
+
+Code AFTER cursor:
+${suffix.slice(0, 500)}
+
+Respond ONLY with valid JSON in this format:
+[
+  {
+    "label": "methodName",
+    "insertText": "methodName(\${1:arg})",
+    "detail": "short description",
+    "kind": "Method"
+  }
+]
+Supported kinds: Method, Function, Variable, Class, Interface, Keyword, Snippet.
+Do NOT include markdown formatting or explanations. Just the JSON array.`;
+
+      const raw = await getChatCompletion(prompt, context, 500);
+      let cleaned = raw.trim();
+      const match = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (match) {
+        cleaned = match[1].trim();
+      } else {
+        cleaned = cleaned.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+      }
+      
+      let items = [];
+      try {
+        items = JSON.parse(cleaned);
+        if (!Array.isArray(items)) items = [];
+      } catch (e) {
+        items = [];
+      }
+
+      res.json({ items });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async convert(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { code, fromLang, toLang, context = {} } = req.body as {

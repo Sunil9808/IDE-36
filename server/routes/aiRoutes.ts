@@ -20,6 +20,7 @@ router.get('/models', aiController.getModels);
 router.get('/providers', aiController.getProviders);
 router.post('/chat', aiController.chat);
 router.post('/complete', aiController.complete);
+router.post('/autocomplete', aiController.autocomplete);
 router.post('/agent', aiController.agent);
 router.post('/agent/stream', aiController.agentStream);
 router.post('/explain', aiController.explain);

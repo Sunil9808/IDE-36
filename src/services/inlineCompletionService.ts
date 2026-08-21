@@ -55,3 +55,27 @@ export function cancelInlineCompletion(): void {
   if (debounceTimer) clearTimeout(debounceTimer);
   if (abortController) abortController.abort();
 }
+
+export async function fetchDropdownCompletion(
+  prefix: string,
+  suffix: string,
+  language: string,
+  context: AIContext,
+): Promise<any[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/autocomplete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prefix, suffix, language, context }),
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json();
+    return data.items || [];
+  } catch (error) {
+    return [];
+  }
+}

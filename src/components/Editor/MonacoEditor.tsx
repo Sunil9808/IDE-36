@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from '../../utils/uuid';
 import { ChatMessage } from '../../types/ai.types';
 import { ExtensionItem, supportsFormatting, supportsLanguage, useExtensionStore } from '../../store/extensionStore';
 import { getExtensionCompletionItems } from '../../services/extensionCompletionService';
-import { fetchInlineCompletion } from '../../services/inlineCompletionService';
+import { fetchInlineCompletion, fetchDropdownCompletion } from '../../services/inlineCompletionService';
 import { configureMonacoEditor } from '../../setup/monacoSetup';
 import { setMonacoInstance } from '../../services/extensionRuntime';
 
@@ -1210,7 +1210,7 @@ function registerSmartCompletionProviders(monaco: typeof Monaco) {
   languages.forEach((languageId) => {
     monaco.languages.registerCompletionItemProvider(languageId, {
       triggerCharacters: ['.', ':', '<', '/', '"', "'", '`', '@', '#', '$'],
-      provideCompletionItems: (model, position) => {
+      provideCompletionItems: async (model, position) => {
         const word = model.getWordUntilPosition(position);
         const prefix = word.word.toLowerCase();
         const range = {
@@ -1228,7 +1228,25 @@ function registerSmartCompletionProviders(monaco: typeof Monaco) {
           model.getLanguageId(),
           range
         );
-        const suggestions = [...languageSuggestions, ...extensionSuggestions, ...documentSuggestions]
+        let aiSuggestions: Monaco.languages.CompletionItem[] = [];
+        if (useAIStore.getState().settings.inlineCompletionsEnabled) {
+          const prefixCode = model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column });
+          const suffixCode = model.getValueInRange({ startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: model.getLineCount(), endColumn: model.getLineMaxColumn(model.getLineCount()) });
+          try {
+            const aiItems = await fetchDropdownCompletion(prefixCode, suffixCode, model.getLanguageId(), { workspaceName: 'my-project' });
+            aiSuggestions = aiItems.map((item: any) => ({
+              label: item.label,
+              kind: monaco.languages.CompletionItemKind[item.kind as keyof typeof monaco.languages.CompletionItemKind] || monaco.languages.CompletionItemKind.Snippet,
+              insertText: item.insertText,
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              detail: item.detail ? [AI]  : [AI] AI Suggestion,
+              range,
+              sortText: '0000_ai',
+            }));
+          } catch (e) {}
+        }
+
+        const suggestions = [...aiSuggestions, ...languageSuggestions, ...extensionSuggestions, ...documentSuggestions]
           .filter((suggestion) => {
             const label = String(suggestion.label).toLowerCase();
             return !prefix || label.includes(prefix);
