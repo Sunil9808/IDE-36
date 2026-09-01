@@ -5,6 +5,7 @@ import { useSettingsStore } from './store/settingsStore';
 import { useEditorStore } from './store/editorStore';
 import { themeService } from './services/themeService';
 import { fileService } from './services/fileService';
+import { outputService } from './services/outputService';
 
 function App() {
   const { theme } = useSettingsStore();
@@ -13,6 +14,13 @@ function App() {
     const t = themeService.getTheme(theme);
     themeService.applyTheme(t);
   }, [theme]);
+
+  useEffect(() => {
+    outputService.initialize();
+    return () => {
+      outputService.cleanup();
+    };
+  }, []);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
