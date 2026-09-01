@@ -1,11 +1,40 @@
 import { X, Circle, LayoutTemplate } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
+import { useUIStore } from '../../store/uiStore';
 import FileTypeIcon from '../Icons/FileTypeIcon';
 
 export default function EditorTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, splitConfig, setSplitConfig } = useEditorStore();
+  const { tabs, activeTabId, setActiveTab, closeTab, closeAllTabs, splitConfig, setSplitConfig, saveTab } = useEditorStore();
+  const setContextMenu = useUIStore(state => state.setContextMenu);
 
   if (tabs.length === 0) return null;
+
+  const handleCloseTab = (e: React.MouseEvent, tab: any) => {
+    e.stopPropagation();
+    if (tab.isDirty) {
+      if (window.confirm(`Do you want to save the changes you made to ${tab.fileName}?\n\nPress OK to Save and Close. Press Cancel to keep it open.`)) {
+        saveTab(tab.id);
+        closeTab(tab.id);
+      }
+    } else {
+      closeTab(tab.id);
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, tab: any) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { id: 'close', label: 'Close', action: () => closeTab(tab.id) },
+        { id: 'close-others', label: 'Close Others', action: () => {
+            tabs.forEach(t => { if (t.id !== tab.id) closeTab(t.id); });
+        }},
+        { id: 'close-all', label: 'Close All', action: closeAllTabs },
+      ]
+    });
+  };
 
   return (
     <div className="editor-tabs-bar no-select">
@@ -18,6 +47,7 @@ export default function EditorTabs() {
             aria-selected={isActive}
             className={`editor-tab${isActive ? ' active' : ''} group`}
             onClick={() => setActiveTab(tab.id)}
+            onContextMenu={(e) => handleContextMenu(e, tab)}
           >
             {/* File icon */}
             <FileTypeIcon filename={tab.fileName} size={14} className="flex-shrink-0 opacity-80" />
@@ -33,7 +63,7 @@ export default function EditorTabs() {
                 <button
                   aria-label={`Close ${tab.fileName} (unsaved)`}
                   className="editor-tab-close"
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  onClick={(e) => handleCloseTab(e, tab)}
                   title="Unsaved changes — click to close"
                 >
                   <span className="editor-tab-dirty" />
@@ -42,7 +72,7 @@ export default function EditorTabs() {
                 <button
                   aria-label={`Close ${tab.fileName}`}
                   className="editor-tab-close"
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  onClick={(e) => handleCloseTab(e, tab)}
                   title="Close"
                 >
                   <X size={11} strokeWidth={2} />
@@ -81,9 +111,10 @@ export default function EditorTabs() {
   );
 }
 
-import { Play, Square, Loader2 } from 'lucide-react';
+import { Play, Square, Pause, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { executionService, ExecutionState } from '../../services/executionService';
+import { projectService } from '../../services/projectService';
 
 function RunButton({ activeTabId }: { activeTabId: string | null }) {
   const { tabs } = useEditorStore();
@@ -102,20 +133,26 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
 
   if (!activeTab) return null;
 
-  const isFramework = executionService.isFrameworkFile(activeTab.fileName);
+  const isProject = executionService.isFrameworkFile(activeTab.fileName) || activeTab.fileName === 'package.json' || activeTab.language === 'html';
   const lang = executionService.detectLanguage(activeTab.fileName);
   
-  if (!isFramework && !lang) return null; // Unsupported
+  if (!isProject && !lang) return null; // Hide run button for unsupported files
 
   const handleRun = () => {
     if (state === 'running') {
       executionService.stop(activeTab.filePath);
     } else {
-      executionService.runFile(activeTab.filePath, activeTab.content || '');
+      if (isProject) {
+        useUIStore.getState().setBottomPanelVisible(true);
+        useUIStore.getState().setActiveBottomPanel('preview');
+        window.dispatchEvent(new CustomEvent('ai-web-ide:start-preview'));
+      } else {
+        executionService.runFile(activeTab.filePath, activeTab.content || '');
+      }
     }
   };
 
-  const label = isFramework ? 'Run Project' : 'Run';
+  const label = isProject ? 'Run Project' : `Run`;
 
   return (
     <button
@@ -129,8 +166,8 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
     >
       {state === 'running' ? (
         <>
-          <Square size={11} fill="currentColor" />
-          <span>Stop</span>
+          <Pause size={11} fill="currentColor" />
+          <span>Pause</span>
         </>
       ) : (
         <>

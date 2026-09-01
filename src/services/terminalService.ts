@@ -24,8 +24,8 @@ class TerminalService {
     return this.socket;
   }
 
-  createSession(shell = '/bin/bash', cwd = process.cwd()): void {
-    this.socket?.emit('terminal:create', { shell, cwd });
+  createSession(sessionId: string, shell?: string, cwd = process.cwd()): void {
+    this.socket?.emit('terminal:create', { sessionId, shell, cwd });
   }
 
   destroySession(sessionId: string): void {

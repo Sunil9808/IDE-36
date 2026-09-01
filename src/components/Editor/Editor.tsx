@@ -145,7 +145,7 @@ export default function Editor() {
               }}
             >
               {activeTab?.language === 'html' ? (
-                <HtmlPreview content={activeTab.content} />
+                <HtmlPreview content={activeTab.content} filePath={activeTab.filePath} tabs={tabs} />
               ) : (
                 <div className="flex h-full items-center justify-center text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
                   Split editor group

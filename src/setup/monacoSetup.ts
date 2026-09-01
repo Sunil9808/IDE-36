@@ -66,6 +66,40 @@ export async function configureMonacoEditor(monaco: typeof Monaco) {
     noSyntaxValidation: false,
   });
 
+  monaco.languages.css.cssDefaults.setOptions({
+    validate: true,
+    lint: {
+      compatibleVendorPrefixes: 'warning',
+      duplicateProperties: 'warning',
+      emptyRules: 'warning',
+      importStatement: 'ignore',
+      zeroUnits: 'ignore',
+      unknownProperties: 'warning',
+    },
+  });
+
+  monaco.languages.html.htmlDefaults.setOptions({
+    format: {
+      tabSize: 2,
+      insertSpaces: true,
+      indentInnerHtml: false,
+      preserveNewLines: true,
+      maxPreserveNewLines: 2,
+      wrapLineLength: 120,
+      unformatted: 'code,pre,script,style',
+      contentUnformatted: 'pre,code,textarea',
+      indentHandlebars: false,
+      endWithNewline: true,
+      extraLiners: 'head, body, /html',
+      wrapAttributes: 'auto',
+    },
+    suggest: {
+      html5: true,
+      angular1: false,
+      ionic: false,
+    },
+  });
+
   monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true);
   monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
 

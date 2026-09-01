@@ -188,14 +188,25 @@ router.post('/start', async (req: Request, res: Response) => {
     };
     processes.set(id, processInfo);
 
-    child.stdout.on('data', (chunk) => {
+    const handleOutput = (chunk: Buffer) => {
       processInfo.status = 'running';
-      appendOutput(processInfo, chunk.toString());
-    });
-    child.stderr.on('data', (chunk) => {
-      processInfo.status = 'running';
-      appendOutput(processInfo, chunk.toString());
-    });
+      const text = chunk.toString();
+      appendOutput(processInfo, text);
+
+      // Dynamically detect server URL from standard Vite/React/Angular/Next outputs
+      if (!processInfo.url || processInfo.url.includes('127.0.0.1')) {
+        const match = text.match(/https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/i);
+        if (match) {
+          processInfo.url = `http://127.0.0.1:${match[1]}`;
+          if (detection.preview) {
+            detection.preview.url = processInfo.url;
+          }
+        }
+      }
+    };
+
+    child.stdout.on('data', handleOutput);
+    child.stderr.on('data', handleOutput);
     child.on('error', (error) => {
       processInfo.status = 'error';
       appendOutput(processInfo, error.message);
@@ -240,10 +251,72 @@ router.get('/html-preview', async (req: Request, res: Response) => {
   try {
     const filePath = resolveWorkspacePath(String(req.query.path || 'index.html'));
     const content = await fsp.readFile(filePath, 'utf-8');
-    res.type('html').send(content);
+    res.type('html').send(rewriteHtmlAssetUrls(content, filePath));
   } catch (error) {
     res.status(404).send(error instanceof Error ? error.message : 'HTML preview not found');
   }
 });
 
+router.get('/html-preview-asset', async (req: Request, res: Response) => {
+  try {
+    const basePath = String(req.query.base || '');
+    const assetPath = String(req.query.path || '');
+    if (!basePath || !assetPath) {
+      res.status(400).send('base and path are required');
+      return;
+    }
+
+    const filePath = resolveWorkspacePath(path.resolve(basePath, assetPath));
+    res.type(getContentType(filePath)).send(await fsp.readFile(filePath));
+  } catch (error) {
+    res.status(404).send(error instanceof Error ? error.message : 'Preview asset not found');
+  }
+});
+
+function rewriteHtmlAssetUrls(content: string, htmlFilePath: string) {
+  const basePath = path.dirname(htmlFilePath);
+  return content
+    .replace(/(<link\b[^>]*\brel=["'][^"']*\bstylesheet\b[^"']*["'][^>]*\bhref=["'])([^"']+)(["'][^>]*>)/gi, (_match, before, href, after) => {
+      return `${before}${toPreviewAssetUrl(basePath, href)}${after}`;
+    })
+    .replace(/(<script\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi, (_match, before, src, after) => {
+      return `${before}${toPreviewAssetUrl(basePath, src)}${after}`;
+    });
+}
+
+function toPreviewAssetUrl(basePath: string, assetUrl: string) {
+  if (!isLocalAssetUrl(assetUrl)) return assetUrl;
+  const pathPart = stripUrlSuffix(assetUrl);
+  const params = new URLSearchParams({
+    base: basePath,
+    path: pathPart,
+  });
+  return `/api/project/html-preview-asset?${params.toString()}`;
+}
+
+function stripUrlSuffix(url: string) {
+  return url.split('#')[0].split('?')[0];
+}
+
+function isLocalAssetUrl(url: string) {
+  return !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|data:|blob:|mailto:|tel:)/i.test(url.trim());
+}
+
+function getContentType(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase();
+  const types: Record<string, string> = {
+    '.css': 'text/css',
+    '.js': 'text/javascript',
+    '.mjs': 'text/javascript',
+    '.html': 'text/html',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+  };
+  return types[ext] || 'application/octet-stream';
+}
 export default router;

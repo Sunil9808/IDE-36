@@ -202,8 +202,63 @@ export default function Explorer() {
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   };
 
+  // Find flat list of nodes for arrow navigation
+  const getFlatNodes = useCallback((nodes: FileNode[], result: FileNode[] = []) => {
+    for (const node of nodes) {
+      result.push(node);
+      if (node.type === 'directory' && expandedFolders.has(node.id) && node.children) {
+        getFlatNodes(node.children, result);
+      }
+    }
+    return result;
+  }, [expandedFolders]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!selectedFileId) return;
+    const flatNodes = getFlatNodes(fileTree);
+    const currentIndex = flatNodes.findIndex(n => n.id === selectedFileId);
+    if (currentIndex === -1) return;
+
+    const selectedNode = flatNodes[currentIndex];
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        if (currentIndex < flatNodes.length - 1) selectFile(flatNodes[currentIndex + 1].id);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (currentIndex > 0) selectFile(flatNodes[currentIndex - 1].id);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        if (selectedNode.type === 'directory' && !expandedFolders.has(selectedNode.id)) {
+          toggleFolder(selectedNode.id);
+        }
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        if (selectedNode.type === 'directory' && expandedFolders.has(selectedNode.id)) {
+          collapseFolder(selectedNode.id);
+        }
+        break;
+      case 'Enter':
+        e.preventDefault();
+        handleFileClick(selectedNode);
+        break;
+      case 'F2':
+        e.preventDefault();
+        renameNode(selectedNode);
+        break;
+      case 'Delete':
+        e.preventDefault();
+        deleteNode(selectedNode);
+        break;
+    }
+  };
+
   return (
-    <div className="flex h-full flex-col overflow-hidden" onClick={() => setContextMenu(null)}>
+    <div className="flex h-full flex-col outline-none overflow-hidden" tabIndex={0} onKeyDown={handleKeyDown} onClick={() => setContextMenu(null)}>
       <div className="flex h-9 items-center justify-between px-3 no-select">
         <span className="text-[11px] font-medium uppercase tracking-normal" style={{ color: 'var(--color-text)' }}>
           Explorer
@@ -270,13 +325,36 @@ export default function Explorer() {
             { label: 'New File', action: () => void createFileInFolder(contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/')) },
             { label: 'New Folder', action: () => void createFolderInFolder(contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/')) },
             null,
+            ...(contextMenu.node.type === 'file' ? [
+              { label: 'Open to the Side', action: () => {
+                useEditorStore.getState().setSplitConfig({ enabled: true, direction: 'vertical' });
+                handleFileClick(contextMenu.node);
+              } },
+              null
+            ] : []),
             { label: 'Rename', action: () => void renameNode(contextMenu.node) },
             { label: 'Delete', action: () => void deleteNode(contextMenu.node) },
             null,
             { label: 'Copy Path', action: () => navigator.clipboard?.writeText(contextMenu.node.path) },
             { label: 'Copy Relative Path', action: () => copyRelativePath(contextMenu.node) },
             null,
-            { label: 'Open in Terminal', action: () => {} },
+            ...(contextMenu.node.type === 'directory' ? [
+              { label: 'Find in Folder...', action: () => {
+                const relativePath = contextMenu.node.path.replace(workspace?.path || '', '').replace(/^[\\/]/, '');
+                useUIStore.getState().setActiveSidebarPanel('search');
+                // You would typically dispatch an event or set state in the search store here
+                window.dispatchEvent(new CustomEvent('ai-web-ide:search-in-folder', { detail: relativePath }));
+              } },
+              null
+            ] : []),
+            { label: 'Open in Terminal', action: () => {
+              const targetCwd = contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/');
+              useUIStore.getState().setBottomPanelVisible(true);
+              useUIStore.getState().setActiveBottomPanel('terminal');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-cd', { detail: targetCwd }));
+              }, 100);
+            }},
           ].map((item, i) =>
             item === null ? (
               <div key={i} className="my-1" style={{ borderTop: '1px solid var(--color-border)' }} />

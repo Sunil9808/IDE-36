@@ -56,6 +56,33 @@ export default function PreviewPanel() {
     };
   }, []);
 
+  useEffect(() => {
+    const onStart = () => {
+      startProject();
+    };
+    window.addEventListener('ai-web-ide:start-preview', onStart);
+    return () => window.removeEventListener('ai-web-ide:start-preview', onStart);
+  }, [workspace?.path]);
+
+  useEffect(() => {
+    let interval: any;
+    if (processInfo && processInfo.status !== 'exited') {
+      interval = setInterval(async () => {
+        try {
+          const processes = await projectService.processes();
+          const p = processes.find(p => p.id === processInfo.id);
+          if (p) {
+            setProcessInfo(p);
+            if (p.url && p.url !== previewUrl) {
+              setPreviewUrl(p.url);
+            }
+          }
+        } catch {}
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [processInfo?.id, processInfo?.status, previewUrl]);
+
   const startProject = async () => {
     setStatus('Starting project...');
     try {
@@ -104,21 +131,35 @@ export default function PreviewPanel() {
         <span className="max-w-[220px] truncate text-[11px]" style={{ color: '#94a3b8' }}>{status}</span>
       </div>
 
-      <div className="flex min-h-0 flex-1 justify-center overflow-auto p-3">
-        {iframeSrc ? (
-          <div style={{ width: DEVICE_WIDTH[device], transform: `scale(${zoom})`, transformOrigin: 'top center' }}>
-            <iframe
-              key={iframeSrc}
-              src={iframeSrc}
-              title="Live Preview"
-              className="h-full min-h-[720px] w-full rounded border bg-white"
-              style={{ borderColor: 'rgba(255,255,255,0.14)' }}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            />
-          </div>
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs" style={{ color: '#94a3b8' }}>
-            Start a detected project or enter a preview URL.
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex-1 flex justify-center overflow-auto p-3 min-h-0">
+          {iframeSrc ? (
+            <div style={{ width: DEVICE_WIDTH[device], transform: `scale(${zoom})`, transformOrigin: 'top center' }}>
+              <iframe
+                key={iframeSrc}
+                src={iframeSrc}
+                title="Live Preview"
+                className="h-full min-h-[720px] w-full rounded border bg-white"
+                style={{ borderColor: 'rgba(255,255,255,0.14)' }}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              />
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs" style={{ color: '#94a3b8' }}>
+              Start a detected project or enter a preview URL.
+            </div>
+          )}
+        </div>
+        
+        {processInfo && processInfo.status !== 'exited' && (
+          <div className="h-32 flex-shrink-0 bg-[#0b1220] border-t overflow-auto p-2" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            <div className="text-[10px] font-semibold tracking-wider uppercase mb-1 flex justify-between" style={{ color: '#94a3b8' }}>
+              <span>Server Logs ({processInfo.command})</span>
+              <span className="text-[var(--accent)]">{processInfo.status}</span>
+            </div>
+            <pre className="text-[11px] font-mono whitespace-pre-wrap leading-relaxed" style={{ color: '#e5e7eb' }}>
+              {processInfo.output || 'Waiting for output...'}
+            </pre>
           </div>
         )}
       </div>

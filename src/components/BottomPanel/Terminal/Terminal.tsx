@@ -20,6 +20,9 @@ import {
 import { terminalService } from '../../../services/terminalService';
 import { useWorkspaceStore } from '../../../store/workspaceStore';
 import { useUIStore } from '../../../store/uiStore';
+import { useEditorStore } from '../../../store/editorStore';
+import { fileService } from '../../../services/fileService';
+import { getLanguageFromExtension } from '../../../utils/fileHelpers';
 import { v4 as uuidv4 } from '../../../utils/uuid';
 
 const IDE_ROOT_CWD = '';
@@ -230,6 +233,68 @@ export default function Terminal() {
     });
   }, [activeInstance.cwd, setActiveCwd, writePrompt]);
 
+  useEffect(() => {
+    const handleCd = (e: CustomEvent<string>) => {
+      const targetCwd = e.detail;
+      const termId = activeInstanceId || instances[0]?.id;
+      const term = xtermRef.current;
+      
+      if (socketConnectedRef.current && socketSessionRef.current) {
+        terminalService.sendData(termId, `cd "${targetCwd.replace(/"/g, '\\"')}"\r`);
+      } else if (term) {
+        void handleFallbackCommand(term, `cd "${targetCwd.replace(/"/g, '\\"')}"`, activeInstanceCwd).then(async (nextCwd) => {
+          if (nextCwd) setActiveCwd(nextCwd);
+          await writePrompt(nextCwd || activeInstanceCwd);
+        });
+      }
+    };
+    
+    const handleRun = (e: CustomEvent<{ command: string, fileName: string, cwd?: string }>) => {
+      const { command, fileName, cwd } = e.detail;
+      const termId = activeInstanceId || instances[0]?.id;
+      const term = xtermRef.current;
+      
+      const targetCwd = cwd || activeInstanceCwd;
+      
+      if (term) {
+        term.writeln('');
+        term.writeln(`\x1b[32m-  Running ${fileName}...\x1b[0m`);
+      }
+      
+      if (socketConnectedRef.current && socketSessionRef.current) {
+        terminalService.sendData(termId, `\x03\r`); // Cancel existing process
+        setTimeout(() => {
+          // If we need to change directory first, we can do it in the command
+          const runCmd = cwd ? `cd "${cwd.replace(/"/g, '\\"')}" && ${command}` : command;
+          terminalService.sendData(termId, `${runCmd}\r`);
+        }, 200);
+      } else if (term) {
+        void handleFallbackCommand(term, command, targetCwd).then(async (nextCwd) => {
+          if (nextCwd) setActiveCwd(nextCwd);
+          await writePrompt(nextCwd || targetCwd);
+        });
+      }
+    };
+    
+    const handleStop = () => {
+      const termId = activeInstanceId || instances[0]?.id;
+      if (socketConnectedRef.current && socketSessionRef.current) {
+        terminalService.sendData(termId, `\x03`);
+        terminalService.sendData(termId, `echo "\\nProcess stopped by user"\r`);
+      }
+    };
+
+    window.addEventListener('ai-web-ide:terminal-cd', handleCd as any);
+    window.addEventListener('ai-web-ide:terminal-run', handleRun as any);
+    window.addEventListener('ai-web-ide:terminal-stop', handleStop as any);
+    
+    return () => {
+      window.removeEventListener('ai-web-ide:terminal-cd', handleCd as any);
+      window.removeEventListener('ai-web-ide:terminal-run', handleRun as any);
+      window.removeEventListener('ai-web-ide:terminal-stop', handleStop as any);
+    };
+  }, [activeInstanceId, instances, activeInstanceCwd, writePrompt, setActiveCwd]);
+
   const createInstance = useCallback((profile: TerminalProfile = activeInstance.profile) => {
     setInstances((current) => {
       const count = current.filter((instance) => instance.profile === profile).length + 1;
@@ -298,6 +363,54 @@ export default function Terminal() {
     fitAddonRef.current = fitAddon;
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
+
+    // Custom File Link Provider
+    term.registerLinkProvider({
+      provideLinks: (bufferLineNumber, callback) => {
+        const line = term.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) || '';
+        const match = line.match(/([a-zA-Z0-9_\-\.\/\\\\]+\.[a-zA-Z0-9]+)(?:",? line |:)(\d+)/);
+        if (match) {
+          const fileName = match[1];
+          const lineNum = parseInt(match[2], 10);
+          const startIndex = line.indexOf(match[0]);
+          callback([{
+            range: {
+              start: { x: startIndex + 1, y: bufferLineNumber },
+              end: { x: startIndex + 1 + match[0].length, y: bufferLineNumber }
+            },
+            text: match[0],
+            activate: async (e, text) => {
+              const workspace = useWorkspaceStore.getState().workspace;
+              if (!workspace) return;
+              try {
+                // Try resolving as absolute relative to workspace
+                const cleanFileName = fileName.replace(/^[\\/]+/, '');
+                const absolutePath = `${workspace.path}/${cleanFileName}`;
+                const fileContent = await fileService.readFile(absolutePath);
+                const fileId = btoa(absolutePath).substring(0, 16);
+                
+                useEditorStore.getState().openTab({
+                  id: `tab-${fileId}`,
+                  fileId,
+                  filePath: fileContent.path,
+                  fileName: cleanFileName.split('/').pop() || cleanFileName,
+                  language: getLanguageFromExtension(cleanFileName),
+                  content: fileContent.content,
+                  isDirty: false,
+                  isPreview: false,
+                  cursorPosition: { line: lineNum, column: 1 },
+                });
+              } catch (err) {
+                console.error("Could not open file from terminal link:", text);
+              }
+            }
+          }]);
+        } else {
+          callback(undefined);
+        }
+      }
+    });
+
     term.open(terminalRef.current);
     xtermRef.current = term;
     term.focus();
