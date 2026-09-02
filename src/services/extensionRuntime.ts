@@ -5,6 +5,7 @@
  */
 import { ExtensionItem, getExtensionCapabilities } from '../store/extensionStore';
 import { getThemeForExtension, applyTheme, initializeTheme } from './extensionThemeService';
+import { extensionHost } from './extensionHost/extensionHostMain';
 
 // Lazy-loaded Monaco reference (set by MonacoEditor when it mounts)
 let _monaco: typeof import('monaco-editor') | null = null;
@@ -54,7 +55,7 @@ function notifyCommandListeners() {
   _commandListeners.forEach((fn) => fn());
 }
 
-function registerCommand(cmd: ExtensionCommand) {
+export function registerCommand(cmd: ExtensionCommand) {
   _registeredCommands.set(cmd.id, cmd);
   notifyCommandListeners();
 }
@@ -113,6 +114,11 @@ function activateExtension(
   ext: ExtensionItem,
   monaco: typeof import('monaco-editor') | null
 ) {
+  // If the extension has real code, run it in the Web Worker host
+  if (ext.code) {
+    extensionHost.activateExtension(ext.id, ext.code);
+  }
+
   const caps = getExtensionCapabilities(ext);
 
   // ── Theme extensions ───────────────────────────────────────────────────

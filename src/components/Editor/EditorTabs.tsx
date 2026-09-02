@@ -142,15 +142,15 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
     if (state === 'running') {
       executionService.stop(activeTab.filePath);
     } else {
-      if (isProject) {
-        useUIStore.getState().setBottomPanelVisible(true);
-        useUIStore.getState().setActiveBottomPanel('preview');
-        window.dispatchEvent(new CustomEvent('ai-web-ide:start-preview'));
-      } else {
-        executionService.runFile(activeTab.filePath, activeTab.content || '');
-      }
+      executionService.runFile(activeTab.filePath, activeTab.content || '');
     }
   };
+
+  useEffect(() => {
+    const fn = () => handleRun();
+    window.addEventListener('ai-web-ide:terminal-run-active', fn);
+    return () => window.removeEventListener('ai-web-ide:terminal-run-active', fn);
+  }, [state, activeTab]);
 
   const label = isProject ? 'Run Project' : `Run`;
 
@@ -159,19 +159,22 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
       onClick={handleRun}
       className={`ide-btn flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors ${
         state === 'running' 
-          ? 'bg-[var(--error)] hover:bg-[var(--error)]/90 text-white border-transparent' 
-          : 'bg-[#10b981] hover:bg-[#10b981]/90 text-white border-transparent'
+          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
+          : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
       }`}
-      style={{ height: 24 }}
+      style={{
+        border: '1px solid currentColor',
+        opacity: 0.8
+      }}
     >
       {state === 'running' ? (
         <>
-          <Pause size={11} fill="currentColor" />
-          <span>Pause</span>
+          <Square size={10} className="fill-current" />
+          <span>Stop</span>
         </>
       ) : (
         <>
-          <Play size={12} fill="currentColor" />
+          <Play size={10} className="fill-current" />
           <span>{label}</span>
         </>
       )}

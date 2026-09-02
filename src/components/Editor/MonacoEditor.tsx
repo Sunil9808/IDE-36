@@ -82,6 +82,9 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
 
     // Set editor content
     editor.setValue(content);
+    
+    // Autofocus editor when opened
+    editor.focus();
 
     // Track cursor position
     editor.onDidChangeCursorPosition((e: Monaco.editor.ICursorPositionChangedEvent) => {
@@ -712,12 +715,13 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
         backgroundRepeat: 'no-repeat',
       } : undefined}
     >
-      <MonacoEditorReact
-        height="100%"
-        language={language}
-        theme={monacoTheme}
-        value={content}
-        beforeMount={handleBeforeMount}
+        <MonacoEditorReact
+          height="100%"
+          path={filePath}
+          language={language}
+          theme={monacoTheme}
+          value={content}
+          beforeMount={handleBeforeMount}
         onMount={handleMount}
         onChange={handleChange}
         options={{

@@ -925,6 +925,7 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let fullOutput = '';
       let exitCode = 0;
 
       while (true) {
@@ -940,12 +941,14 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
           try {
             const payload = JSON.parse(line.slice(6)) as { type: string; text?: string; code?: number };
             if (payload.type === 'stdout' && payload.text) {
-              // Write chunk directly — convert \r\n to proper terminal sequences
               term.write(payload.text.replace(/\r?\n/g, '\r\n'));
+              fullOutput += payload.text;
             } else if (payload.type === 'stderr' && payload.text) {
               term.write(`\x1b[31m${payload.text.replace(/\r?\n/g, '\r\n')}\x1b[0m`);
+              fullOutput += payload.text;
             } else if (payload.type === 'error' && payload.text) {
               term.writeln(`\x1b[33m${payload.text}\x1b[0m`);
+              fullOutput += payload.text;
             } else if (payload.type === 'exit') {
               exitCode = payload.code ?? 0;
             }
@@ -956,8 +959,10 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
       const duration = ((performance.now() - start) / 1000).toFixed(1);
       if (exitCode !== 0) {
         term.writeln(`\x1b[31m\r\nExited with code ${exitCode} (${duration}s)\x1b[0m`);
+        window.dispatchEvent(new CustomEvent('ai-web-ide:parse-errors', { detail: fullOutput }));
       } else {
         term.writeln(`\x1b[90m\r\nDone in ${duration}s\x1b[0m`);
+        window.dispatchEvent(new CustomEvent('ai-web-ide:parse-errors', { detail: fullOutput }));
       }
       return;
     }
@@ -986,6 +991,8 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
     } else {
       term.writeln(`\x1b[90mDone in ${duration}s\x1b[0m`);
     }
+    
+    window.dispatchEvent(new CustomEvent('ai-web-ide:parse-errors', { detail: output }));
   } catch (error) {
     term.writeln('\x1b[33mBackend command runner is not connected.\x1b[0m');
     term.writeln(`\x1b[90m${error instanceof Error ? error.message : 'Start the backend server, reload the app, then run the command again.'}\x1b[0m`);

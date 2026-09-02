@@ -24,6 +24,8 @@ export interface ExtensionItem {
   aiAutoInstalled?: boolean;
   /** Language(s) this extension primarily supports */
   targetLanguages?: string[];
+  /** Extension code to execute in worker */
+  code?: string;
 }
 
 interface ExtensionStore {
@@ -48,6 +50,38 @@ const DEPRECATED_DEMO_IDS = new Set([
 ]);
 
 export const recommendedCatalog: ExtensionItem[] = [
+  extension('test.extension', 'Test Extension', 'Test Publisher', '1.0.0', 'A test extension that runs real code in the extension host.', { 
+    verified: true, 
+    activationTime: 50, 
+    code: `
+exports.activate = function(context) {
+  const vscode = require('vscode');
+  vscode.window.showInformationMessage('Test Extension Activated in Web Worker!');
+  
+  let cmd1 = vscode.commands.registerCommand('test.extension.hello', function () {
+    vscode.window.showInformationMessage('Test Extension ✓: Hello from Web Worker!');
+  });
+
+  let cmd2 = vscode.commands.registerCommand('test.extension.createFile', function () {
+    vscode.window.showInformationMessage('Test Extension: Create File triggered (mock)');
+  });
+
+  let completion = vscode.languages.registerCompletionItemProvider('*', {
+    provideCompletionItems: function(document, position) {
+      return [{ label: 'helloWorld', detail: 'Test Extension' }];
+    }
+  });
+
+  let hover = vscode.languages.registerHoverProvider('*', {
+    provideHover: function(document, position) {
+      return { contents: ['Test Extension Documentation'] };
+    }
+  });
+  
+  context.subscriptions.push(cmd1, cmd2, completion, hover);
+};
+    `
+  }),
   extension('formulahendry.auto-rename-tag', 'Auto Rename Tag', 'Jun Han', '0.1.10', 'Auto rename paired HTML/XML tags.', { activationTime: 160 }),
   extension('saoudrizwan.claude-dev', 'Cline', 'Cline', '3.17.0', 'Autonomous coding agent right in your IDE.', { verified: true, activationTime: 4219 }),
   extension('continue.continue', 'Continue', 'Continue', '1.0.0', 'Open-source AI code assistant.', { verified: true, activationTime: 781 }),
@@ -261,6 +295,15 @@ interface OpenVsxDetail {
 }
 
 async function buildInternetInstall(item: ExtensionItem) {
+  if (item.code) {
+    // If it's a test extension with embedded code, bypass network
+    return activateExtension({
+      ...item,
+      installedAt: new Date().toISOString(),
+      source: 'Local Test'
+    }, 'Local Test');
+  }
+
   const [namespace, ...nameParts] = item.id.split('.');
   const name = nameParts.join('.');
   if (!namespace || !name) return activateExtension(item, 'Local');

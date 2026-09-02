@@ -326,6 +326,10 @@ export default function Explorer() {
             { label: 'New Folder', action: () => void createFolderInFolder(contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/')) },
             null,
             ...(contextMenu.node.type === 'file' ? [
+              { label: 'Run', action: () => {
+                handleFileClick(contextMenu.node);
+                setTimeout(() => window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-run-active')), 200);
+              } },
               { label: 'Open to the Side', action: () => {
                 useEditorStore.getState().setSplitConfig({ enabled: true, direction: 'vertical' });
                 handleFileClick(contextMenu.node);

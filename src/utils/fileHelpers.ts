@@ -9,7 +9,7 @@ export const getFileIcon = (filename: string, isDirectory = false, isOpen = fals
 export const getLanguageFromExtension = (filename: string): string => {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   const langMap: Record<string, string> = {
-    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+    ts: 'typescript', tsx: 'typescriptreact', js: 'javascript', jsx: 'javascriptreact',
     py: 'python', rb: 'ruby', java: 'java', cpp: 'cpp', c: 'c',
     cs: 'csharp', go: 'go', rs: 'rust', php: 'php', swift: 'swift',
     kt: 'kotlin', html: 'html', css: 'css', scss: 'scss', less: 'less',
