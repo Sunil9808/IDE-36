@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { initTerminalSocket } from './terminalSocket';
+import { logger } from '../utils/logger';
 
 let io: SocketIOServer;
 
@@ -15,17 +16,17 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
   });
 
   io.on('connection', (socket: Socket) => {
-    console.log(`[Socket] Client connected: ${socket.id}`);
+    logger.info(`[Socket] Client connected: ${socket.id}`);
 
     // Initialize terminal socket handlers
     initTerminalSocket(socket);
 
     socket.on('disconnect', (reason) => {
-      console.log(`[Socket] Client disconnected: ${socket.id} - ${reason}`);
+      logger.info(`[Socket] Client disconnected: ${socket.id} - ${reason}`);
     });
 
     socket.on('error', (error) => {
-      console.error(`[Socket] Error from ${socket.id}:`, error);
+      logger.error(`[Socket] Error from ${socket.id}: ${error instanceof Error ? error.message : String(error)}`);
     });
   });
 

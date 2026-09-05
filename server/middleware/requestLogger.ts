@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger';
 
 export function requestLogger(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now();
@@ -11,7 +12,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     const reset = '\x1b[0m';
     // Skip health check logs to reduce noise
     if (url !== '/api/health') {
-      console.log(`${color}[${method}]${reset} ${url} ${status} ${duration}ms`);
+      logger.info(`${color}[${method}]${reset} ${url} ${status} ${duration}ms`);
     }
   });
 
