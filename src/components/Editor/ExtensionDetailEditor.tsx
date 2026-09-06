@@ -68,6 +68,7 @@ interface OpenVsxDetail {
 export default function ExtensionDetailEditor({ content }: ExtensionDetailEditorProps) {
   const initialItem = useMemo(() => parseExtension(content), [content]);
   const { installed, installExtensionFromInternet, uninstallExtension } = useExtensionStore();
+  const installProgress = useExtensionStore(state => state.installProgress[initialItem.id]);
   const addNotification = useUIStore((state) => state.addNotification);
   const [activeTab, setActiveTab] = useState<DetailTab>('details');
   const [autoUpdate, setAutoUpdate] = useState(true);
@@ -203,8 +204,8 @@ export default function ExtensionDetailEditor({ content }: ExtensionDetailEditor
                     </button>
                   </>
                 ) : (
-                  <button className="h-[34px] rounded px-3 text-[16px] font-medium hover:brightness-110 disabled:opacity-70" style={primaryButtonStyle} disabled={installing} onClick={requestInstall}>
-                    {installing ? 'Installing...' : 'Install'}
+                  <button className="h-[34px] rounded px-3 text-[16px] font-medium hover:brightness-110 disabled:opacity-70" style={primaryButtonStyle} disabled={installing || !!installProgress} onClick={requestInstall}>
+                    {installProgress || 'Install'}
                   </button>
                 )}
                 <label className="flex h-[34px] items-center gap-2 text-[17px]" style={{ color: '#d8d8d8' }}>

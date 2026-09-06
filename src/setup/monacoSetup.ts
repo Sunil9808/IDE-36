@@ -100,8 +100,31 @@ export async function configureMonacoEditor(monaco: typeof Monaco) {
     },
   });
 
+  
+  monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+    validate: true,
+    schemas: [
+      {
+        uri: 'http://json.schemastore.org/package',
+        fileMatch: ['package.json'],
+      },
+      {
+        uri: 'http://json.schemastore.org/tsconfig',
+        fileMatch: ['tsconfig.json', 'tsconfig.*.json'],
+      },
+      {
+        uri: 'http://json.schemastore.org/prettierrc',
+        fileMatch: ['.prettierrc', '.prettierrc.json'],
+      }
+    ]
+  });
+
   monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true);
   monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
+
+  const { IDE_API_TYPES } = await import('../sdk/ideApi');
+  monaco.languages.typescript.typescriptDefaults.addExtraLib(IDE_API_TYPES, 'file:///node_modules/@types/ide/index.d.ts');
+  monaco.languages.typescript.javascriptDefaults.addExtraLib(IDE_API_TYPES, 'file:///node_modules/@types/ide/index.d.ts');
 
   registerLanguageConfigurations(monaco);
 }

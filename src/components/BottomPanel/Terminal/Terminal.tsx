@@ -1,3 +1,5 @@
+import { localServerManager } from '../../../services/LocalServerManager';
+import { useDiagnosticStore } from '../../../store/diagnosticStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
@@ -249,6 +251,7 @@ export default function Terminal() {
       }
     };
     
+    
     const handleRun = (e: CustomEvent<{ command: string, fileName: string, cwd?: string }>) => {
       const { command, fileName, cwd } = e.detail;
       const termId = activeInstanceId || instances[0]?.id;
@@ -262,20 +265,28 @@ export default function Terminal() {
       }
       
       if (socketConnectedRef.current && socketSessionRef.current) {
-        terminalService.sendData(termId, `\x03\r`); // Cancel existing process
-        setTimeout(() => {
-          // If we need to change directory first, we can do it in the command
-          const runCmd = cwd ? `cd "${cwd.replace(/"/g, '\\"')}" && ${command}` : command;
-          terminalService.sendData(termId, `${runCmd}\r`);
-        }, 200);
+        // Detect Windows
+        const isWin = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('windows');
+        
+        // Wrap command to output exit code silently
+        const marker = '__AI_EXIT_CODE_=';
+        let runCmd = '';
+        if (isWin) {
+           runCmd = `cmd.exe /c "${cwd ? `cd /d "${cwd.replace(/"/g, '\"')}" && ` : ''}${command}" ; echo ${marker}$?`;
+        } else {
+           runCmd = `${cwd ? `cd "${cwd.replace(/"/g, '\"')}" && ` : ''}${command} ; echo ${marker}$?`;
+        }
+        
+        terminalService.sendData(termId, `${runCmd}\r`);
       } else if (term) {
         void handleFallbackCommand(term, command, targetCwd).then(async (nextCwd) => {
           if (nextCwd) setActiveCwd(nextCwd);
           await writePrompt(nextCwd || targetCwd);
+          window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-completed', { detail: { exitCode: 0 } }));
         });
       }
     };
-    
+
     const handleStop = () => {
       const termId = activeInstanceId || instances[0]?.id;
       if (socketConnectedRef.current && socketSessionRef.current) {
@@ -465,9 +476,63 @@ export default function Terminal() {
         rows: term.rows,
       });
 
+      
       const onData = (data: { sessionId: string; data: string }) => {
-        if (data.sessionId === sessionId) term.write(data.data);
+        if (data.sessionId === sessionId) {
+          // Check for exit marker
+          const str = data.data;
+          const match = str.match(/__AI_EXIT_CODE_=(\d+)/);
+          if (match) {
+             const exitCode = parseInt(match[1], 10);
+             // Remove marker from output
+             const clean = str.replace(/__AI_EXIT_CODE_=\d+\r?\n?/, '');
+             if (clean) term.write(clean);
+             
+             term.writeln(`\r\n\x1b[${exitCode === 0 ? '32' : '31'}mProcess exited with code ${exitCode}\x1b[0m`);
+             window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-completed', { detail: { exitCode } }));
+             return;
+          }
+          
+          // Check for common compiler/linter error patterns
+          // e.g. main.cpp:10:5: error: expected ';' before '}'
+          // e.g. /path/to/file.js:4:1
+          
+          // Check for localhost URLs
+          const urlMatch = str.match(/(http|https):\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0):(\d+)/i);
+          if (urlMatch) {
+             const scheme = urlMatch[1].toLowerCase();
+             const host = urlMatch[2] === '0.0.0.0' || urlMatch[2] === '127.0.0.1' ? 'localhost' : urlMatch[2];
+             const port = parseInt(urlMatch[3], 10);
+             const url = `${scheme}://${host}:${port}`;
+             
+             localServerManager.registerServer({
+                id: `server-${port}`,
+                workspaceId: 'local', // We could get real workspaceId from store
+                projectRoot: activeInstanceCwd,
+                command: 'Detected Server',
+                port,
+                host,
+                url,
+                status: 'running'
+             });
+          }
+
+          const errMatch = str.match(/([a-zA-Z0-9_\-\./\\]+\.[a-zA-Z0-9]+):(\d+):(\d+):?\s*(error|warning|fatal)?:?\s*(.*)/i);
+          if (errMatch) {
+             const file = errMatch[1].split(/[\\/]/).pop() || errMatch[1];
+             useDiagnosticStore.getState().addDiagnostic({
+                file,
+                line: parseInt(errMatch[2], 10),
+                message: errMatch[5] || 'Terminal error',
+                severity: (errMatch[4] && errMatch[4].toLowerCase() === 'warning') ? 'warning' : 'error',
+                source: 'terminal'
+             });
+          }
+
+          term.write(data.data);
+        }
       };
+
 
       const onCreated = (session: { id: string; isConnected?: boolean; cwd?: string; shell?: string }) => {
         if (session.id !== sessionId) return;

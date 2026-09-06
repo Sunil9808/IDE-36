@@ -126,9 +126,9 @@ export default function Explorer() {
     }
   };
 
-  const renameNode = async (node: FileNode) => {
+  const renameNode = async (node: FileNode, newPathOverride?: string) => {
     const newName = window.prompt('New name', node.name)?.trim();
-    if (!newName || newName === node.name) return;
+    if (!newPathOverride && (!newName || newName === node.name)) return;
 
     const separator = node.path.includes('\\') ? '\\' : '/';
     const parentPath = node.path.split(/[\\/]/).slice(0, -1).join(separator);
@@ -351,7 +351,15 @@ export default function Explorer() {
               } },
               null
             ] : []),
-            { label: 'Open in Terminal', action: () => {
+            
+              { label: 'Open With...', action: () => {
+                alert('Open With: No additional handlers registered for ' + contextMenu.node.name);
+              }},
+              { label: 'Reveal in File Explorer', action: () => {
+                alert('Reveal in File Explorer is not supported in the Web File System API for security reasons. Path: ' + contextMenu.node.path);
+              }},
+              { label: 'Open in Terminal', action: () => {
+
               const targetCwd = contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/');
               useUIStore.getState().setBottomPanelVisible(true);
               useUIStore.getState().setActiveBottomPanel('terminal');

@@ -73,7 +73,7 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
     editorRef.current = editor;
     monacoRef.current = monaco;
     registerEditorThemes(monaco);
-    registerSmartCompletionProviders(monaco);
+    
     registerInlineCompletionProvider(monaco);
 
     // Wire Monaco into the extension runtime so linting, formatting,
@@ -689,21 +689,57 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
     return () => window.removeEventListener('ai-web-ide:editor-command', runCommand);
   }, []);
 
-  // Update content when tab changes
+  
+  // Manage Monaco Models per URI
   useEffect(() => {
-    if (editorRef.current && editorRef.current.getValue() !== content) {
-      const model = editorRef.current.getModel();
-      if (model) {
-        editorRef.current.pushUndoStop();
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco || !filePath) return;
+
+    let uriString = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
+    const uri = monaco.Uri.parse(uriString);
+    
+    let model = monaco.editor.getModel(uri);
+    
+    if (!model) {
+      // Create new model
+      model = monaco.editor.createModel(content, language, uri);
+    } else {
+      // Sync content if it changed externally (not by the editor)
+      if (model.getValue() !== content && editor.getModel() !== model) {
+         model.setValue(content);
+      }
+    }
+    
+    if (editor.getModel() !== model) {
+      editor.setModel(model);
+    }
+    
+    editor.focus();
+    
+    // Update language if it changed
+    if (model.getLanguageId() !== language) {
+       monaco.editor.setModelLanguage(model, language);
+    }
+  }, [tabId, filePath, language, monacoRef.current, editorRef.current]);
+
+  // Update content when model changes
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor && editor.getModel()) {
+      const model = editor.getModel();
+      if (model && model.getValue() !== content) {
+        editor.pushUndoStop();
         model.pushEditOperations(
           [],
           [{ range: model.getFullModelRange(), text: content }],
           () => null
         );
-        editorRef.current.pushUndoStop();
+        editor.pushUndoStop();
       }
     }
   }, [content]);
+
 
   return (
     <div
@@ -1176,215 +1212,6 @@ function registerInlineCompletionProvider(monaco: typeof Monaco) {
       freeInlineCompletions: () => {},
     });
   });
-}
-
-function registerSmartCompletionProviders(monaco: typeof Monaco) {
-  if (smartCompletionProvidersRegistered) return;
-  smartCompletionProvidersRegistered = true;
-
-  const languages = [
-    'javascript', 'typescript', 'javascriptreact', 'typescriptreact', 'jsx', 'tsx',
-    'python', 'java', 'cpp', 'c', 'csharp', 'go', 'rust', 'php', 'ruby', 'swift', 'kotlin',
-    'html', 'css', 'scss', 'json', 'yaml', 'markdown', 'shell', 'sql', 'plaintext',
-  ];
-
-  languages.forEach((languageId) => {
-    // 1. FAST SYNCHRONOUS PROVIDER (Local features)
-    monaco.languages.registerCompletionItemProvider(languageId, {
-      triggerCharacters: ['.', ':', '<', '/', '"', "'", '`', '@', '#', '$', '-', '=', ' '],
-      provideCompletionItems: (model, position) => {
-        const word = model.getWordUntilPosition(position);
-        const prefix = word.word.toLowerCase();
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn,
-        };
-
-        const languageSuggestions = getLanguageCompletionItems(monaco, model.getLanguageId(), range) || [];
-        const documentSuggestions = getDocumentWordCompletionItems(monaco, model, range) || [];
-        const extensionSuggestions = getExtensionCompletionItems(
-          monaco,
-          useExtensionStore.getState().installed,
-          model.getLanguageId(),
-          range
-        ) || [];
-
-        const suggestions = [...languageSuggestions, ...extensionSuggestions, ...documentSuggestions]
-          .filter((suggestion) => {
-            const label = String(suggestion.label).toLowerCase();
-            return !prefix || label.includes(prefix);
-          })
-          .sort((a, b) => {
-            const aLabel = String(a.label).toLowerCase();
-            const bLabel = String(b.label).toLowerCase();
-            return aLabel.startsWith(prefix) === bLabel.startsWith(prefix) ? aLabel.localeCompare(bLabel) : aLabel.startsWith(prefix) ? -1 : 1;
-          });
-
-        return { suggestions };
-      }
-    });
-
-    // 2. SLOW ASYNCHRONOUS PROVIDER (AI Autocomplete)
-    monaco.languages.registerCompletionItemProvider(languageId, {
-      triggerCharacters: ['.', ':', '<', '/', '"', "'", '`', '@', '#', '$', '-', '=', ' '],
-      provideCompletionItems: async (model, position, context, token) => {
-        if (!useAIStore.getState().settings.inlineCompletionsEnabled) {
-          return { suggestions: [] };
-        }
-
-        const word = model.getWordUntilPosition(position);
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn,
-        };
-
-        const prefixCode = model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column });
-        const suffixCode = model.getValueInRange({ startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: model.getLineCount(), endColumn: model.getLineMaxColumn(model.getLineCount()) });
-
-        try {
-          const abortController = new AbortController();
-          const tokenListener = token.onCancellationRequested(() => abortController.abort());
-
-          const openTabs = useEditorStore.getState().tabs.filter(t => t.id !== useEditorStore.getState().activeTabId).map(t => ({ path: t.filePath, name: t.fileName, language: t.language, content: t.content?.slice(0, 1500) }));
-          
-          const aiItems = await fetchDropdownCompletion(
-            prefixCode, 
-            suffixCode, 
-            model.getLanguageId(), 
-            { workspaceName: 'my-project', openFiles: openTabs as any },
-            abortController.signal
-          );
-          
-          tokenListener.dispose();
-
-          const aiSuggestions = aiItems.map((item: any) => ({
-            label: item.label,
-            kind: monaco.languages.CompletionItemKind[item.kind as keyof typeof monaco.languages.CompletionItemKind] || monaco.languages.CompletionItemKind.Snippet,
-            insertText: item.insertText,
-            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            detail: item.detail ? '[AI] ' + item.detail : '[AI] AI Suggestion',
-            range,
-            sortText: '0000_ai',
-          }));
-
-          return { suggestions: aiSuggestions };
-        } catch (e) {
-          return { suggestions: [] };
-        }
-      }
-    });
-  });
-}
-
-function getLanguageCompletionItems(
-  monaco: typeof Monaco,
-  languageId: string,
-  range: Monaco.IRange
-): Monaco.languages.CompletionItem[] {
-  const kind = monaco.languages.CompletionItemKind;
-  const snippetRule = monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
-  const keyword = (label: string): Monaco.languages.CompletionItem => ({
-    label,
-    kind: kind.Keyword,
-    insertText: label,
-    range,
-  });
-  const snippet = (label: string, insertText: string, detail: string): Monaco.languages.CompletionItem => ({
-    label,
-    kind: kind.Snippet,
-    insertText,
-    insertTextRules: snippetRule,
-    detail,
-    range,
-  });
-
-  const common = ['TODO', 'FIXME', 'class', 'console', 'const', 'export', 'false', 'function', 'import', 'length', 'let', 'line', 'list', 'local', 'log', 'loop', 'return', 'true', 'value'].map(keyword);
-  const reactItems = [
-    ...['children', 'className', 'disabled', 'export', 'Fragment', 'import', 'key', 'onChange', 'onClick', 'props', 'React', 'return', 'style', 'useCallback', 'useEffect', 'useMemo', 'useRef', 'useState'].map(keyword),
-    snippet('component', 'export default function ${1:Component}() {\n\treturn (\n\t\t${0:<div />}\n\t);\n}', 'React component'),
-    snippet('useEffect', 'useEffect(() => {\n\t${0}\n}, [${1}]);', 'React effect'),
-    snippet('useState', 'const [${1:value}, set${2:Value}] = useState(${3:null});', 'React state'),
-    snippet('map', '{${1:items}.map((${2:item}) => (\n\t${0:<div key={${2:item}.id} />}\n))}', 'Render list'),
-  ];
-  const items: Record<string, Monaco.languages.CompletionItem[]> = {
-    python: [
-      ...['and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def', 'elif', 'else', 'except', 'False', 'finally', 'for', 'from', 'if', 'import', 'in', 'is', 'lambda', 'None', 'not', 'or', 'pass', 'raise', 'return', 'True', 'try', 'while', 'with', 'yield', 'print', 'len', 'range', 'list', 'dict', 'set', 'tuple', 'str', 'int', 'float', 'input'].map(keyword),
-      snippet('def', 'def ${1:function_name}(${2:args}):\n\t${0:pass}', 'Python function'),
-      snippet('class', 'class ${1:ClassName}:\n\tdef __init__(self${2:, args}):\n\t\t${0:pass}', 'Python class'),
-      snippet('ifmain', 'if __name__ == "__main__":\n\t${0:main()}', 'Python main guard'),
-      snippet('for', 'for ${1:item} in ${2:items}:\n\t${0:pass}', 'Python for loop'),
-    ],
-    javascript: [
-      ...['await', 'async', 'break', 'case', 'catch', 'class', 'const', 'continue', 'default', 'else', 'export', 'extends', 'false', 'finally', 'for', 'function', 'if', 'import', 'let', 'localStorage', 'location', 'log', 'new', 'null', 'return', 'switch', 'this', 'throw', 'true', 'try', 'typeof', 'undefined', 'while', 'console', 'document', 'window'].map(keyword),
-      snippet('fn', 'function ${1:name}(${2:args}) {\n\t${0}\n}', 'JavaScript function'),
-      snippet('afn', 'const ${1:name} = async (${2:args}) => {\n\t${0}\n};', 'Async arrow function'),
-      snippet('log', 'console.log(${1:value});', 'Console log'),
-    ],
-    typescript: [
-      ...['abstract', 'any', 'as', 'async', 'await', 'boolean', 'class', 'const', 'enum', 'export', 'extends', 'false', 'implements', 'import', 'interface', 'let', 'localStorage', 'namespace', 'null', 'number', 'private', 'protected', 'public', 'readonly', 'return', 'string', 'true', 'type', 'undefined', 'unknown', 'void'].map(keyword),
-      snippet('interface', 'interface ${1:Name} {\n\t${0}\n}', 'TypeScript interface'),
-      snippet('type', 'type ${1:Name} = ${0};', 'TypeScript type alias'),
-      snippet('component', 'function ${1:Component}() {\n\treturn ${0:null};\n}', 'React component'),
-    ],
-    javascriptreact: reactItems,
-    typescriptreact: reactItems,
-    jsx: reactItems,
-    tsx: reactItems,
-    java: [
-      ...['abstract', 'boolean', 'break', 'case', 'catch', 'class', 'continue', 'double', 'else', 'extends', 'final', 'finally', 'for', 'if', 'implements', 'import', 'int', 'interface', 'new', 'private', 'protected', 'public', 'return', 'static', 'String', 'this', 'throw', 'try', 'void', 'while'].map(keyword),
-      snippet('main', 'public static void main(String[] args) {\n\t${0}\n}', 'Java main method'),
-      snippet('class', 'public class ${1:ClassName} {\n\t${0}\n}', 'Java class'),
-    ],
-    cpp: [
-      ...['auto', 'bool', 'break', 'case', 'catch', 'class', 'const', 'continue', 'double', 'else', 'for', 'if', 'include', 'int', 'namespace', 'private', 'protected', 'public', 'return', 'std', 'string', 'struct', 'template', 'using', 'void', 'while'].map(keyword),
-      snippet('main', 'int main() {\n\t${0:return 0;}\n}', 'C++ main function'),
-      snippet('cout', 'std::cout << ${1:value} << std::endl;', 'C++ output'),
-    ],
-    c: [
-      ...['auto', 'break', 'case', 'char', 'const', 'continue', 'double', 'else', 'enum', 'float', 'for', 'if', 'include', 'int', 'long', 'printf', 'return', 'short', 'sizeof', 'static', 'struct', 'switch', 'void', 'while'].map(keyword),
-      snippet('main', 'int main(void) {\n\t${0:return 0;}\n}', 'C main function'),
-      snippet('printf', 'printf("${1:%s}\\n"${2:, value});', 'C print'),
-    ],
-    go: [
-      ...['break', 'case', 'chan', 'const', 'continue', 'defer', 'else', 'fallthrough', 'for', 'func', 'go', 'if', 'import', 'interface', 'map', 'package', 'range', 'return', 'select', 'struct', 'switch', 'type', 'var', 'fmt'].map(keyword),
-      snippet('main', 'func main() {\n\t${0}\n}', 'Go main function'),
-      snippet('printf', 'fmt.Printf("${1:%v}\\n", ${2:value})', 'Go printf'),
-    ],
-    rust: [
-      ...['as', 'async', 'await', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'fn', 'for', 'if', 'impl', 'let', 'loop', 'match', 'mod', 'mut', 'pub', 'return', 'self', 'struct', 'trait', 'use', 'where', 'while'].map(keyword),
-      snippet('main', 'fn main() {\n\t${0}\n}', 'Rust main function'),
-      snippet('println', 'println!("${1:{}}", ${2:value});', 'Rust print'),
-    ],
-    html: [
-      ...['html', 'head', 'body', 'div', 'span', 'button', 'input', 'label', 'section', 'main', 'header', 'footer', 'script', 'style', 'class', 'id'].map(keyword),
-      snippet('html5', '<!doctype html>\n<html lang="en">\n<head>\n\t<meta charset="UTF-8" />\n\t<title>${1:Document}</title>\n</head>\n<body>\n\t${0}\n</body>\n</html>', 'HTML document'),
-    ],
-    css: [
-      ...['align-items', 'background', 'border', 'color', 'display', 'flex', 'font-size', 'gap', 'grid', 'height', 'justify-content', 'margin', 'padding', 'position', 'width'].map(keyword),
-      snippet('flex', 'display: flex;\nalign-items: ${1:center};\njustify-content: ${2:center};', 'Flex layout'),
-    ],
-  };
-
-  return items[languageId] || common;
-}
-
-function getDocumentWordCompletionItems(
-  monaco: typeof Monaco,
-  model: Monaco.editor.ITextModel,
-  range: Monaco.IRange
-): Monaco.languages.CompletionItem[] {
-  const words = new Set(model.getValue().match(/\b[A-Za-z_][A-Za-z0-9_]{2,}\b/g) || []);
-  return Array.from(words).slice(0, 120).map((word) => ({
-    label: word,
-    kind: monaco.languages.CompletionItemKind.Text,
-    insertText: word,
-    detail: 'Current document',
-    range,
-  }));
 }
 
 async function handleSave(
