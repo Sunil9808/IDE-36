@@ -99,6 +99,8 @@ export function AgentPanel({}: AgentPanelProps) {
   const [events, setEvents] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [runningTasks, setRunningTasks] = useState<{id: string, command: string}[]>([]);
+  const [clarificationMessage, setClarificationMessage] = useState<string | null>(null);
+
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -202,12 +204,15 @@ export function AgentPanel({}: AgentPanelProps) {
       let fullTask = task;
 
       setEvents([]);
+      setClarificationMessage(null);
       let finalData = null;
 
       await aiService.runAgentTask(fullTask, context, conversationHistory, (event: any) => {
         if (event.type === 'agent_result') {
           finalData = event.result;
           setPlan(event.result);
+        } else if (event.type === 'clarification' || event.type === 'confirmation_required') {
+          setClarificationMessage(event.message || 'Could you provide more details?');
         } else {
           setEvents(prev => {
             // Update existing tool event or add new
@@ -223,6 +228,7 @@ export function AgentPanel({}: AgentPanelProps) {
           });
         }
       });
+
       
       if (finalData) {
         if (workspace?.type !== 'local') {
@@ -457,6 +463,7 @@ export function AgentPanel({}: AgentPanelProps) {
         )}
         
         {isPlanning && events.length === 0 && (
+
           <div className="flex justify-start mb-6">
             <div className="bg-[var(--bg-1)] border border-[var(--border-0)] px-4 py-3 rounded-2xl rounded-tl-sm max-w-[85%] shadow-sm flex items-center gap-3 text-sm text-[var(--text-1)]">
               <Loader2 size={16} className="animate-spin text-[var(--accent)] shrink-0" />
@@ -465,7 +472,18 @@ export function AgentPanel({}: AgentPanelProps) {
           </div>
         )}
 
+        {/* Clarification / confirmation response from the agent */}
+        {clarificationMessage && !isPlanning && !plan && (
+          <div className="flex justify-start mb-6">
+            <div className="bg-[var(--bg-1)] border border-[var(--border-0)] px-4 py-3 rounded-2xl rounded-tl-sm max-w-[95%] shadow-sm flex items-start gap-3">
+              <Bot size={16} className="mt-0.5 text-[var(--accent)] shrink-0" />
+              <p className="text-sm text-[var(--text-0)] whitespace-pre-wrap leading-relaxed">{clarificationMessage}</p>
+            </div>
+          </div>
+        )}
+
         {plan && !isPlanning && (
+
           <div className="flex justify-start mb-6">
             <div className="bg-[var(--bg-1)] border border-[var(--border-0)] px-4 py-3 rounded-2xl rounded-tl-sm max-w-[95%] w-full shadow-sm">
               <p className="text-sm text-[var(--text-0)] whitespace-pre-wrap mb-3 leading-relaxed">

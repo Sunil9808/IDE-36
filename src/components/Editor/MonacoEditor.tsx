@@ -1239,7 +1239,7 @@ function registerSmartCompletionProviders(monaco: typeof Monaco) {
               kind: monaco.languages.CompletionItemKind[item.kind as keyof typeof monaco.languages.CompletionItemKind] || monaco.languages.CompletionItemKind.Snippet,
               insertText: item.insertText,
               insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              detail: item.detail ? [AI]  : [AI] AI Suggestion,
+              detail: item.detail ? `[AI] ${item.detail}` : '[AI] AI Suggestion',
               range,
               sortText: '0000_ai',
             }));
