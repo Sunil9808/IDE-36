@@ -23,6 +23,20 @@ export const aiController = {
     }
   },
 
+  async health(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const healthStatus = await adapterRegistry.getHealth();
+      const allAvailable = Object.values(healthStatus).some(h => h.available);
+      res.status(allAvailable ? 200 : 503).json({
+        status: allAvailable ? 'ok' : 'degraded',
+        providers: healthStatus,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async chat(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { prompt, context = {}, conversationHistory = [], model, provider, profile, sessionId } = req.body as {

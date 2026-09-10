@@ -38,15 +38,23 @@ export class OllamaAdapter implements ModelAdapter {
 
     const startTime = Date.now();
     try {
+      // Build proper multi-turn message array from conversation history
+      const messages: { role: string; content: string }[] = [
+        { role: 'system', content: systemPrompt },
+        // Inject last 10 turns of history for multi-turn context
+        ...conversationHistory.slice(-10).map(entry => ({
+          role: entry.role,
+          content: entry.content,
+        })),
+        { role: 'user', content: prompt },
+      ];
+
       const response = await fetch(`${this.getBaseUrl()}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt },
-          ],
+          messages,
           options: {
             temperature: profile?.temperature ?? 0.7,
             num_predict: profile?.maxTokens,
@@ -106,15 +114,22 @@ export class OllamaAdapter implements ModelAdapter {
     const { prompt, context, conversationHistory = [], model = 'llama3', profile } = options;
     const systemPrompt = buildSystemPrompt(context, conversationHistory);
 
+    // Build multi-turn message array (same approach as streamChat)
+    const messages: { role: string; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+      ...conversationHistory.slice(-10).map(entry => ({
+        role: entry.role,
+        content: entry.content,
+      })),
+      { role: 'user', content: prompt },
+    ];
+
     const response = await fetch(`${this.getBaseUrl()}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
+        messages,
         options: {
           temperature: profile?.temperature ?? 0.7,
           num_predict: profile?.maxTokens,

@@ -18,6 +18,7 @@ router.get('/test', async (_req: Request, res: Response) => {
 // All AI routes
 router.get('/models', aiController.getModels);
 router.get('/providers', aiController.getProviders);
+router.get('/health', aiController.health);
 router.post('/chat', aiController.chat);
 router.post('/complete', aiController.complete);
 router.post('/autocomplete', aiController.autocomplete);
