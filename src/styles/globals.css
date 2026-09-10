@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 
-@tailwind base;
+@import "tailwindcss/base";
 @tailwind components;
 @tailwind utilities;
 
@@ -271,7 +271,7 @@ input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px
 .panel-tab.active::after { background:var(--accent); }
 
 /* --- Sidebar --- */
-.sidebar-section-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px 4px; font-size:10.5px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-2); user-select:none; }
+.sidebar-section-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px 4px; font-size:10.5px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-2); -webkit-user-select:none; user-select:none; }
 .file-tree-item { display:flex; align-items:center; gap:4px; height:22px; padding-right:8px; font-size:13px; cursor:pointer; border-radius:var(--r-xs); color:var(--text-0); transition:background var(--t-fast); white-space:nowrap; overflow:hidden; user-select:none; }
 .file-tree-item:hover { background:var(--color-hover); }
 .file-tree-item.active { background:var(--color-selected); }
