@@ -1,3 +1,5 @@
+import { localServerManager } from '../../../services/LocalServerManager';
+import { useDiagnosticStore } from '../../../store/diagnosticStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
@@ -20,6 +22,9 @@ import {
 import { terminalService } from '../../../services/terminalService';
 import { useWorkspaceStore } from '../../../store/workspaceStore';
 import { useUIStore } from '../../../store/uiStore';
+import { useEditorStore } from '../../../store/editorStore';
+import { fileService } from '../../../services/fileService';
+import { getLanguageFromExtension } from '../../../utils/fileHelpers';
 import { v4 as uuidv4 } from '../../../utils/uuid';
 
 const IDE_ROOT_CWD = '';
@@ -230,6 +235,77 @@ export default function Terminal() {
     });
   }, [activeInstance.cwd, setActiveCwd, writePrompt]);
 
+  useEffect(() => {
+    const handleCd = (e: CustomEvent<string>) => {
+      const targetCwd = e.detail;
+      const termId = activeInstanceId || instances[0]?.id;
+      const term = xtermRef.current;
+      
+      if (socketConnectedRef.current && socketSessionRef.current) {
+        terminalService.sendData(termId, `cd "${targetCwd.replace(/"/g, '\\"')}"\r`);
+      } else if (term) {
+        void handleFallbackCommand(term, `cd "${targetCwd.replace(/"/g, '\\"')}"`, activeInstanceCwd).then(async (nextCwd) => {
+          if (nextCwd) setActiveCwd(nextCwd);
+          await writePrompt(nextCwd || activeInstanceCwd);
+        });
+      }
+    };
+    
+    
+    const handleRun = (e: CustomEvent<{ command: string, fileName: string, cwd?: string }>) => {
+      const { command, fileName, cwd } = e.detail;
+      const termId = activeInstanceId || instances[0]?.id;
+      const term = xtermRef.current;
+      
+      const targetCwd = cwd || activeInstanceCwd;
+      
+      if (term) {
+        term.writeln('');
+        term.writeln(`\x1b[32m-  Running ${fileName}...\x1b[0m`);
+      }
+      
+      if (socketConnectedRef.current && socketSessionRef.current) {
+        // Detect Windows
+        const isWin = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('windows');
+        
+        // Wrap command to output exit code silently
+        const marker = '__AI_EXIT_CODE_=';
+        let runCmd = '';
+        if (isWin) {
+           runCmd = `cmd.exe /c "${cwd ? `cd /d "${cwd.replace(/"/g, '\"')}" && ` : ''}${command}" ; echo ${marker}$?`;
+        } else {
+           runCmd = `${cwd ? `cd "${cwd.replace(/"/g, '\"')}" && ` : ''}${command} ; echo ${marker}$?`;
+        }
+        
+        terminalService.sendData(termId, `${runCmd}\r`);
+      } else if (term) {
+        void handleFallbackCommand(term, command, targetCwd).then(async (nextCwd) => {
+          if (nextCwd) setActiveCwd(nextCwd);
+          await writePrompt(nextCwd || targetCwd);
+          window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-completed', { detail: { exitCode: 0 } }));
+        });
+      }
+    };
+
+    const handleStop = () => {
+      const termId = activeInstanceId || instances[0]?.id;
+      if (socketConnectedRef.current && socketSessionRef.current) {
+        terminalService.sendData(termId, `\x03`);
+        terminalService.sendData(termId, `echo "\\nProcess stopped by user"\r`);
+      }
+    };
+
+    window.addEventListener('ai-web-ide:terminal-cd', handleCd as any);
+    window.addEventListener('ai-web-ide:terminal-run', handleRun as any);
+    window.addEventListener('ai-web-ide:terminal-stop', handleStop as any);
+    
+    return () => {
+      window.removeEventListener('ai-web-ide:terminal-cd', handleCd as any);
+      window.removeEventListener('ai-web-ide:terminal-run', handleRun as any);
+      window.removeEventListener('ai-web-ide:terminal-stop', handleStop as any);
+    };
+  }, [activeInstanceId, instances, activeInstanceCwd, writePrompt, setActiveCwd]);
+
   const createInstance = useCallback((profile: TerminalProfile = activeInstance.profile) => {
     setInstances((current) => {
       const count = current.filter((instance) => instance.profile === profile).length + 1;
@@ -298,6 +374,54 @@ export default function Terminal() {
     fitAddonRef.current = fitAddon;
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
+
+    // Custom File Link Provider
+    term.registerLinkProvider({
+      provideLinks: (bufferLineNumber, callback) => {
+        const line = term.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) || '';
+        const match = line.match(/([a-zA-Z0-9_\-\.\/\\\\]+\.[a-zA-Z0-9]+)(?:",? line |:)(\d+)/);
+        if (match) {
+          const fileName = match[1];
+          const lineNum = parseInt(match[2], 10);
+          const startIndex = line.indexOf(match[0]);
+          callback([{
+            range: {
+              start: { x: startIndex + 1, y: bufferLineNumber },
+              end: { x: startIndex + 1 + match[0].length, y: bufferLineNumber }
+            },
+            text: match[0],
+            activate: async (e, text) => {
+              const workspace = useWorkspaceStore.getState().workspace;
+              if (!workspace) return;
+              try {
+                // Try resolving as absolute relative to workspace
+                const cleanFileName = fileName.replace(/^[\\/]+/, '');
+                const absolutePath = `${workspace.path}/${cleanFileName}`;
+                const fileContent = await fileService.readFile(absolutePath);
+                const fileId = btoa(absolutePath).substring(0, 16);
+                
+                useEditorStore.getState().openTab({
+                  id: `tab-${fileId}`,
+                  fileId,
+                  filePath: fileContent.path,
+                  fileName: cleanFileName.split('/').pop() || cleanFileName,
+                  language: getLanguageFromExtension(cleanFileName),
+                  content: fileContent.content,
+                  isDirty: false,
+                  isPreview: false,
+                  cursorPosition: { line: lineNum, column: 1 },
+                });
+              } catch (err) {
+                console.error("Could not open file from terminal link:", text);
+              }
+            }
+          }]);
+        } else {
+          callback(undefined);
+        }
+      }
+    });
+
     term.open(terminalRef.current);
     xtermRef.current = term;
     term.focus();
@@ -352,9 +476,63 @@ export default function Terminal() {
         rows: term.rows,
       });
 
+      
       const onData = (data: { sessionId: string; data: string }) => {
-        if (data.sessionId === sessionId) term.write(data.data);
+        if (data.sessionId === sessionId) {
+          // Check for exit marker
+          const str = data.data;
+          const match = str.match(/__AI_EXIT_CODE_=(\d+)/);
+          if (match) {
+             const exitCode = parseInt(match[1], 10);
+             // Remove marker from output
+             const clean = str.replace(/__AI_EXIT_CODE_=\d+\r?\n?/, '');
+             if (clean) term.write(clean);
+             
+             term.writeln(`\r\n\x1b[${exitCode === 0 ? '32' : '31'}mProcess exited with code ${exitCode}\x1b[0m`);
+             window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-completed', { detail: { exitCode } }));
+             return;
+          }
+          
+          // Check for common compiler/linter error patterns
+          // e.g. main.cpp:10:5: error: expected ';' before '}'
+          // e.g. /path/to/file.js:4:1
+          
+          // Check for localhost URLs
+          const urlMatch = str.match(/(http|https):\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0):(\d+)/i);
+          if (urlMatch) {
+             const scheme = urlMatch[1].toLowerCase();
+             const host = urlMatch[2] === '0.0.0.0' || urlMatch[2] === '127.0.0.1' ? 'localhost' : urlMatch[2];
+             const port = parseInt(urlMatch[3], 10);
+             const url = `${scheme}://${host}:${port}`;
+             
+             localServerManager.registerServer({
+                id: `server-${port}`,
+                workspaceId: 'local', // We could get real workspaceId from store
+                projectRoot: activeInstanceCwd,
+                command: 'Detected Server',
+                port,
+                host,
+                url,
+                status: 'running'
+             });
+          }
+
+          const errMatch = str.match(/([a-zA-Z0-9_\-\./\\]+\.[a-zA-Z0-9]+):(\d+):(\d+):?\s*(error|warning|fatal)?:?\s*(.*)/i);
+          if (errMatch) {
+             const file = errMatch[1].split(/[\\/]/).pop() || errMatch[1];
+             useDiagnosticStore.getState().addDiagnostic({
+                file,
+                line: parseInt(errMatch[2], 10),
+                message: errMatch[5] || 'Terminal error',
+                severity: (errMatch[4] && errMatch[4].toLowerCase() === 'warning') ? 'warning' : 'error',
+                source: 'terminal'
+             });
+          }
+
+          term.write(data.data);
+        }
       };
+
 
       const onCreated = (session: { id: string; isConnected?: boolean; cwd?: string; shell?: string }) => {
         if (session.id !== sessionId) return;
@@ -812,6 +990,7 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let fullOutput = '';
       let exitCode = 0;
 
       while (true) {
@@ -827,12 +1006,14 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
           try {
             const payload = JSON.parse(line.slice(6)) as { type: string; text?: string; code?: number };
             if (payload.type === 'stdout' && payload.text) {
-              // Write chunk directly — convert \r\n to proper terminal sequences
               term.write(payload.text.replace(/\r?\n/g, '\r\n'));
+              fullOutput += payload.text;
             } else if (payload.type === 'stderr' && payload.text) {
               term.write(`\x1b[31m${payload.text.replace(/\r?\n/g, '\r\n')}\x1b[0m`);
+              fullOutput += payload.text;
             } else if (payload.type === 'error' && payload.text) {
               term.writeln(`\x1b[33m${payload.text}\x1b[0m`);
+              fullOutput += payload.text;
             } else if (payload.type === 'exit') {
               exitCode = payload.code ?? 0;
             }
@@ -843,8 +1024,10 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
       const duration = ((performance.now() - start) / 1000).toFixed(1);
       if (exitCode !== 0) {
         term.writeln(`\x1b[31m\r\nExited with code ${exitCode} (${duration}s)\x1b[0m`);
+        window.dispatchEvent(new CustomEvent('ai-web-ide:parse-errors', { detail: fullOutput }));
       } else {
         term.writeln(`\x1b[90m\r\nDone in ${duration}s\x1b[0m`);
+        window.dispatchEvent(new CustomEvent('ai-web-ide:parse-errors', { detail: fullOutput }));
       }
       return;
     }
@@ -873,6 +1056,8 @@ async function runBackendCommand(term: XTerm, command: string, cwd: string) {
     } else {
       term.writeln(`\x1b[90mDone in ${duration}s\x1b[0m`);
     }
+    
+    window.dispatchEvent(new CustomEvent('ai-web-ide:parse-errors', { detail: output }));
   } catch (error) {
     term.writeln('\x1b[33mBackend command runner is not connected.\x1b[0m');
     term.writeln(`\x1b[90m${error instanceof Error ? error.message : 'Start the backend server, reload the app, then run the command again.'}\x1b[0m`);

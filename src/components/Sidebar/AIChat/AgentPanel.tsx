@@ -6,8 +6,10 @@ import { useWorkspaceStore } from '../../../store/workspaceStore';
 import { useFileStore } from '../../../store/fileStore';
 import { fileService } from '../../../services/fileService';
 import { useUIStore } from '../../../store/uiStore';
-import { DiffEditor } from '@monaco-editor/react';
 import * as Diff from 'diff';
+import { getLanguageFromExtension } from '../../../utils/fileHelpers';
+// @ts-ignore
+import { DiffEditor } from '@monaco-editor/react';
 import { aiService } from '../../../services/aiService';
 import { ModelSelector } from './ModelSelector';
 
@@ -137,7 +139,7 @@ export function AgentPanel({}: AgentPanelProps) {
     }
   };
   
-  const { getActiveTab } = useEditorStore();
+  const { getActiveTab, openTab } = useEditorStore();
   const workspace = useWorkspaceStore((state) => state.workspace);
   const fileTree = useFileStore((state) => state.fileTree);
   const { addNotification } = useUIStore();
@@ -566,9 +568,34 @@ export function AgentPanel({}: AgentPanelProps) {
                                 <div className={`font-medium ${isCurrent ? 'text-[var(--accent)]' : 'text-[var(--text-1)]'}`}>
                                   {a.type} {a.type === 'deleteFile' && <span className="text-[var(--error)] text-xs ml-1">(Delete)</span>}
                                 </div>
-                                <div className="text-xs text-[var(--text-2)] font-mono truncate mt-0.5">
-                                  {a.path || a.target || a.command || (a.oldPath ? `${a.oldPath} -> ${a.newPath}` : '')}
-                                </div>
+                                  <div 
+                                    className={`text-xs font-mono truncate mt-0.5 ${(a.path || a.target || a.oldPath) ? 'text-[var(--accent)] hover:underline cursor-pointer' : 'text-[var(--text-2)]'}`}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const p = a.path || a.target || a.oldPath;
+                                      if (!p || !workspace?.path) return;
+                                      const absolutePath = `${workspace.path}/${p.replace(/^[\\/]+/, '')}`;
+                                      try {
+                                        const fileContent = await fileService.readFile(absolutePath);
+                                        const fileId = btoa(absolutePath).substring(0, 16);
+                                        openTab({
+                                          id: `tab-${fileId}`,
+                                          fileId,
+                                          filePath: fileContent.path,
+                                          fileName: p.split('/').pop() || p,
+                                          language: getLanguageFromExtension(p),
+                                          content: fileContent.content,
+                                          isDirty: false,
+                                          isPreview: false,
+                                          cursorPosition: { line: 1, column: 1 },
+                                        });
+                                      } catch (err) {
+                                        addNotification({ type: 'error', message: 'Could not open file (it might have been deleted)' });
+                                      }
+                                    }}
+                                  >
+                                    {a.path || a.target || a.command || (a.oldPath ? `${a.oldPath} -> ${a.newPath}` : '')}
+                                  </div>
                               </div>
                             </div>
                             {isDone && (a.type === 'writeFile' || a.type === 'appendFile') && workspace?.path && (

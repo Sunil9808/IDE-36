@@ -56,26 +56,49 @@ export function cancelInlineCompletion(): void {
   if (abortController) abortController.abort();
 }
 
+let dropdownDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let dropdownAbortController: AbortController | null = null;
+
 export async function fetchDropdownCompletion(
   prefix: string,
   suffix: string,
   language: string,
   context: AIContext,
+  signal?: AbortSignal,
+  delayMs = 400
 ): Promise<any[]> {
-  try {
-    const response = await fetch(`${BASE_URL}/autocomplete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prefix, suffix, language, context }),
-    });
+  return new Promise((resolve) => {
+    if (dropdownDebounceTimer) clearTimeout(dropdownDebounceTimer);
+    if (dropdownAbortController) dropdownAbortController.abort();
 
-    if (!response.ok) {
-      return [];
-    }
+    dropdownDebounceTimer = setTimeout(async () => {
+      dropdownAbortController = new AbortController();
+      
+      const combinedSignal = signal || dropdownAbortController.signal;
+      // If external signal is aborted while waiting
+      if (combinedSignal.aborted) {
+        resolve([]);
+        return;
+      }
 
-    const data = await response.json();
-    return data.items || [];
-  } catch (error) {
-    return [];
-  }
+      try {
+        const response = await fetch(`${BASE_URL}/autocomplete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefix, suffix, language, context }),
+          signal: combinedSignal,
+        });
+
+        if (!response.ok) {
+          resolve([]);
+          return;
+        }
+
+        const data = await response.json();
+        resolve(data.items || []);
+      } catch (error) {
+        resolve([]);
+      }
+    }, delayMs);
+  });
 }

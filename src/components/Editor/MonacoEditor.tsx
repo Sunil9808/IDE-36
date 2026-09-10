@@ -73,7 +73,7 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
     editorRef.current = editor;
     monacoRef.current = monaco;
     registerEditorThemes(monaco);
-    registerSmartCompletionProviders(monaco);
+    
     registerInlineCompletionProvider(monaco);
 
     // Wire Monaco into the extension runtime so linting, formatting,
@@ -82,6 +82,9 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
 
     // Set editor content
     editor.setValue(content);
+    
+    // Autofocus editor when opened
+    editor.focus();
 
     // Track cursor position
     editor.onDidChangeCursorPosition((e: Monaco.editor.ICursorPositionChangedEvent) => {
@@ -686,21 +689,57 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
     return () => window.removeEventListener('ai-web-ide:editor-command', runCommand);
   }, []);
 
-  // Update content when tab changes
+  
+  // Manage Monaco Models per URI
   useEffect(() => {
-    if (editorRef.current && editorRef.current.getValue() !== content) {
-      const model = editorRef.current.getModel();
-      if (model) {
-        editorRef.current.pushUndoStop();
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco || !filePath) return;
+
+    let uriString = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
+    const uri = monaco.Uri.parse(uriString);
+    
+    let model = monaco.editor.getModel(uri);
+    
+    if (!model) {
+      // Create new model
+      model = monaco.editor.createModel(content, language, uri);
+    } else {
+      // Sync content if it changed externally (not by the editor)
+      if (model.getValue() !== content && editor.getModel() !== model) {
+         model.setValue(content);
+      }
+    }
+    
+    if (editor.getModel() !== model) {
+      editor.setModel(model);
+    }
+    
+    editor.focus();
+    
+    // Update language if it changed
+    if (model.getLanguageId() !== language) {
+       monaco.editor.setModelLanguage(model, language);
+    }
+  }, [tabId, filePath, language, monacoRef.current, editorRef.current]);
+
+  // Update content when model changes
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor && editor.getModel()) {
+      const model = editor.getModel();
+      if (model && model.getValue() !== content) {
+        editor.pushUndoStop();
         model.pushEditOperations(
           [],
           [{ range: model.getFullModelRange(), text: content }],
           () => null
         );
-        editorRef.current.pushUndoStop();
+        editor.pushUndoStop();
       }
     }
   }, [content]);
+
 
   return (
     <div
@@ -712,12 +751,13 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
         backgroundRepeat: 'no-repeat',
       } : undefined}
     >
-      <MonacoEditorReact
-        height="100%"
-        language={language}
-        theme={monacoTheme}
-        value={content}
-        beforeMount={handleBeforeMount}
+        <MonacoEditorReact
+          height="100%"
+          path={filePath}
+          language={language}
+          theme={monacoTheme}
+          value={content}
+          beforeMount={handleBeforeMount}
         onMount={handleMount}
         onChange={handleChange}
         options={{

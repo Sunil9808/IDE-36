@@ -5,12 +5,24 @@
  */
 import { ExtensionItem, getExtensionCapabilities } from '../store/extensionStore';
 import { getThemeForExtension, applyTheme, initializeTheme } from './extensionThemeService';
+import { extensionHost } from './extensionHost/extensionHostMain';
 
 // Lazy-loaded Monaco reference (set by MonacoEditor when it mounts)
 let _monaco: typeof import('monaco-editor') | null = null;
 
 export function setMonacoInstance(monaco: typeof import('monaco-editor')) {
   _monaco = monaco;
+  extensionHost.setMonacoInstance(monaco);
+  
+  // Setup language activation listener
+  monaco.editor.onDidCreateModel(model => {
+    fireActivationEvent(`onLanguage:${model.getLanguageId()}`);
+  });
+  // Fire for existing models
+  for (const model of monaco.editor.getModels()) {
+    fireActivationEvent(`onLanguage:${model.getLanguageId()}`);
+  }
+  
   // Re-run activations with the new monaco instance
   const { installed } = getInstalledFromStore();
   activateAll(installed, monaco);
@@ -28,6 +40,30 @@ function getInstalledFromStore(): { installed: ExtensionItem[] } {
 }
 
 // ── Command Registry ────────────────────────────────────────────────────────
+
+
+export interface RegisteredRunner {
+  id: string;
+  languages: string[];
+  extensionId: string;
+  createExecution: (context: any) => Promise<any>;
+  canRun: (context: any) => Promise<boolean>;
+  validate: (context: any) => Promise<string | undefined>;
+}
+
+const _registeredRunners = new Map<string, RegisteredRunner>();
+
+export function getRunners(languageId?: string): RegisteredRunner[] {
+  const runners = Array.from(_registeredRunners.values());
+  if (languageId) {
+    return runners.filter(r => r.languages.includes(languageId) || r.languages.includes('*'));
+  }
+  return runners;
+}
+
+export function registerRunner(runner: RegisteredRunner) {
+  _registeredRunners.set(runner.id, runner);
+}
 
 export interface ExtensionCommand {
   id: string;
@@ -54,7 +90,7 @@ function notifyCommandListeners() {
   _commandListeners.forEach((fn) => fn());
 }
 
-function registerCommand(cmd: ExtensionCommand) {
+export function registerCommand(cmd: ExtensionCommand) {
   _registeredCommands.set(cmd.id, cmd);
   notifyCommandListeners();
 }
@@ -87,22 +123,66 @@ function notifyActiveListeners() {
 
 // ── Main Activation ─────────────────────────────────────────────────────────
 
+const _firedEvents: Set<string> = new Set(['onStartup']);
+const _installedRegistry = new Map<string, ExtensionItem>();
+
+export function fireActivationEvent(event: string) {
+  if (_firedEvents.has(event)) return;
+  _firedEvents.add(event);
+  
+  // Find any installed extensions that should now activate
+  for (const ext of _installedRegistry.values()) {
+    if (!_activeExtensions.has(ext.id) && shouldActivate(ext)) {
+      activateExtension(ext, _monaco);
+    }
+  }
+}
+
+function shouldActivate(ext: ExtensionItem): boolean {
+  if (!ext.activationEvents || ext.activationEvents.length === 0) {
+    return true; // No events specified = activate on startup
+  }
+  if (ext.activationEvents.includes('*')) return true;
+  
+  for (const event of ext.activationEvents) {
+    if (_firedEvents.has(event)) return true;
+  }
+  return false;
+}
+
 export function activateAll(
   installed: ExtensionItem[],
   monaco: typeof import('monaco-editor') | null = _monaco
 ) {
-  // Clear all existing extension state
-  _registeredCommands.clear();
-  _activeExtensions.clear();
-
+  // Sync registry
+  const installedIds = new Set(installed.map(e => e.id));
   for (const ext of installed) {
-    activateExtension(ext, monaco);
+    _installedRegistry.set(ext.id, ext);
+  }
+  for (const id of _installedRegistry.keys()) {
+    if (!installedIds.has(id)) _installedRegistry.delete(id);
+  }
+
+  // Deactivate removed ones
+  for (const id of _activeExtensions) {
+    if (!installedIds.has(id)) {
+      extensionHost.deactivateExtension(id);
+      unregisterExtensionCommands(id);
+      _activeExtensions.delete(id);
+    }
+  }
+
+  // Check which ones should be active
+  for (const ext of installed) {
+    if (!_activeExtensions.has(ext.id) && shouldActivate(ext)) {
+      activateExtension(ext, monaco);
+    }
   }
 
   // Apply linter with the full installed list (needs all at once)
   if (monaco) {
-    activateLinterForInstalled(installed, monaco);
-    activateFormatterForInstalled(installed, monaco);
+    // activateLinterForInstalled(installed, monaco);
+    // activateFormatterForInstalled(installed, monaco);
   }
 
   notifyCommandListeners();
@@ -113,6 +193,11 @@ function activateExtension(
   ext: ExtensionItem,
   monaco: typeof import('monaco-editor') | null
 ) {
+  // If the extension has real code, run it in the Web Worker host
+  if (ext.code) {
+    extensionHost.activateExtension(ext.id, ext.code);
+  }
+
   const caps = getExtensionCapabilities(ext);
 
   // ── Theme extensions ───────────────────────────────────────────────────

@@ -128,7 +128,14 @@ export const fileService = {
       const fileHandle = await resolveHandle(handle, filePath, true);
       const file = await fileHandle.getFile();
       const content = await file.text();
-      return { content, encoding: 'utf8' };
+      return { 
+        content, 
+        encoding: 'utf8',
+        path: filePath,
+        language: this.getLanguageFromExtension(filePath),
+        size: file.size,
+        lastModified: file.lastModified
+      } as any;
     }
     const { data } = await axios.get(`${BASE_URL}/files/read`, {
       params: { path: filePath },

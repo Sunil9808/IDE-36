@@ -3,13 +3,12 @@ import { exec, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { getWorkspaceRoot } from '../utils/workspaceRoot';
 
 const router = Router();
-const workspaceRoot = path.basename(process.cwd()).toLowerCase() === 'server'
-  ? path.resolve(process.cwd(), '..')
-  : process.cwd();
 
 function resolveCommandCwd(value: unknown) {
+  const workspaceRoot = getWorkspaceRoot();
   const requested = typeof value === 'string' ? value.trim() : '';
   if (!requested) return workspaceRoot;
 
