@@ -66,8 +66,65 @@ export async function configureMonacoEditor(monaco: typeof Monaco) {
     noSyntaxValidation: false,
   });
 
+  monaco.languages.css.cssDefaults.setOptions({
+    validate: true,
+    lint: {
+      compatibleVendorPrefixes: 'warning',
+      duplicateProperties: 'warning',
+      emptyRules: 'warning',
+      importStatement: 'ignore',
+      zeroUnits: 'ignore',
+      unknownProperties: 'warning',
+    },
+  });
+
+  monaco.languages.html.htmlDefaults.setOptions({
+    format: {
+      tabSize: 2,
+      insertSpaces: true,
+      indentInnerHtml: false,
+      preserveNewLines: true,
+      maxPreserveNewLines: 2,
+      wrapLineLength: 120,
+      unformatted: 'code,pre,script,style',
+      contentUnformatted: 'pre,code,textarea',
+      indentHandlebars: false,
+      endWithNewline: true,
+      extraLiners: 'head, body, /html',
+      wrapAttributes: 'auto',
+    },
+    suggest: {
+      html5: true,
+      angular1: false,
+      ionic: false,
+    },
+  });
+
+  
+  monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+    validate: true,
+    schemas: [
+      {
+        uri: 'http://json.schemastore.org/package',
+        fileMatch: ['package.json'],
+      },
+      {
+        uri: 'http://json.schemastore.org/tsconfig',
+        fileMatch: ['tsconfig.json', 'tsconfig.*.json'],
+      },
+      {
+        uri: 'http://json.schemastore.org/prettierrc',
+        fileMatch: ['.prettierrc', '.prettierrc.json'],
+      }
+    ]
+  });
+
   monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true);
   monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
+
+  const { IDE_API_TYPES } = await import('../sdk/ideApi');
+  monaco.languages.typescript.typescriptDefaults.addExtraLib(IDE_API_TYPES, 'file:///node_modules/@types/ide/index.d.ts');
+  monaco.languages.typescript.javascriptDefaults.addExtraLib(IDE_API_TYPES, 'file:///node_modules/@types/ide/index.d.ts');
 
   registerLanguageConfigurations(monaco);
 }

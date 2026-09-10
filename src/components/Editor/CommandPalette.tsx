@@ -158,6 +158,17 @@ export default function CommandPalette() {
     { id: 'run-selected-text', label: 'Terminal: Run Selected Text', category: 'Terminal', icon: <Terminal size={13} />, action: () => runEditorCommand('run-selected-text') },
     { id: 'ai-explain', label: 'AI: Explain Selection or File', category: 'AI', icon: <Bot size={13} />, action: () => runEditorCommand('ai-explain') },
     { id: 'ai-generate', label: 'AI: Generate Code', category: 'AI', icon: <Bot size={13} />, action: () => runEditorCommand('ai-generate') },
+    {
+      id: 'create-extension',
+      label: 'Extensions: Create New Extension',
+      category: 'Extensions',
+      icon: <Puzzle size={13} />,
+      action: async () => {
+        const { createExtensionProject } = await import('../../services/projectTemplateService');
+        await createExtensionProject();
+        setCommandPaletteOpen(false);
+      }
+    },
     // File commands
     ...allFiles.map((file) => ({
       id: `file-${file.id}`,

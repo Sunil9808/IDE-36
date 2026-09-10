@@ -1,11 +1,40 @@
 import { X, Circle, LayoutTemplate } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
+import { useUIStore } from '../../store/uiStore';
 import FileTypeIcon from '../Icons/FileTypeIcon';
 
 export default function EditorTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, splitConfig, setSplitConfig } = useEditorStore();
+  const { tabs, activeTabId, setActiveTab, closeTab, closeAllTabs, splitConfig, setSplitConfig, saveTab } = useEditorStore();
+  const setContextMenu = useUIStore(state => state.setContextMenu);
 
   if (tabs.length === 0) return null;
+
+  const handleCloseTab = (e: React.MouseEvent, tab: any) => {
+    e.stopPropagation();
+    if (tab.isDirty) {
+      if (window.confirm(`Do you want to save the changes you made to ${tab.fileName}?\n\nPress OK to Save and Close. Press Cancel to keep it open.`)) {
+        saveTab(tab.id);
+        closeTab(tab.id);
+      }
+    } else {
+      closeTab(tab.id);
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, tab: any) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { id: 'close', label: 'Close', action: () => closeTab(tab.id) },
+        { id: 'close-others', label: 'Close Others', action: () => {
+            tabs.forEach(t => { if (t.id !== tab.id) closeTab(t.id); });
+        }},
+        { id: 'close-all', label: 'Close All', action: closeAllTabs },
+      ]
+    });
+  };
 
   return (
     <div className="editor-tabs-bar no-select">
@@ -18,6 +47,7 @@ export default function EditorTabs() {
             aria-selected={isActive}
             className={`editor-tab${isActive ? ' active' : ''} group`}
             onClick={() => setActiveTab(tab.id)}
+            onContextMenu={(e) => handleContextMenu(e, tab)}
           >
             {/* File icon */}
             <FileTypeIcon filename={tab.fileName} size={14} className="flex-shrink-0 opacity-80" />
@@ -33,7 +63,7 @@ export default function EditorTabs() {
                 <button
                   aria-label={`Close ${tab.fileName} (unsaved)`}
                   className="editor-tab-close"
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  onClick={(e) => handleCloseTab(e, tab)}
                   title="Unsaved changes — click to close"
                 >
                   <span className="editor-tab-dirty" />
@@ -42,7 +72,7 @@ export default function EditorTabs() {
                 <button
                   aria-label={`Close ${tab.fileName}`}
                   className="editor-tab-close"
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  onClick={(e) => handleCloseTab(e, tab)}
                   title="Close"
                 >
                   <X size={11} strokeWidth={2} />
@@ -81,9 +111,10 @@ export default function EditorTabs() {
   );
 }
 
-import { Play, Square, Loader2 } from 'lucide-react';
+import { Play, Square, Pause, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { executionService, ExecutionState } from '../../services/executionService';
+import { projectService } from '../../services/projectService';
 
 function RunButton({ activeTabId }: { activeTabId: string | null }) {
   const { tabs } = useEditorStore();
@@ -102,10 +133,10 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
 
   if (!activeTab) return null;
 
-  const isFramework = executionService.isFrameworkFile(activeTab.fileName);
+  const isProject = executionService.isFrameworkFile(activeTab.fileName) || activeTab.fileName === 'package.json' || activeTab.language === 'html';
   const lang = executionService.detectLanguage(activeTab.fileName);
   
-  if (!isFramework && !lang) return null; // Unsupported
+  if (!isProject && !lang) return null; // Hide run button for unsupported files
 
   const handleRun = () => {
     if (state === 'running') {
@@ -115,29 +146,57 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
     }
   };
 
-  const label = isFramework ? 'Run Project' : 'Run';
+  useEffect(() => {
+    const fn = () => handleRun();
+    window.addEventListener('ai-web-ide:terminal-run-active', fn);
+    return () => window.removeEventListener('ai-web-ide:terminal-run-active', fn);
+  }, [state, activeTab]);
 
-  return (
-    <button
-      onClick={handleRun}
-      className={`ide-btn flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors ${
-        state === 'running' 
-          ? 'bg-[var(--error)] hover:bg-[var(--error)]/90 text-white border-transparent' 
-          : 'bg-[#10b981] hover:bg-[#10b981]/90 text-white border-transparent'
-      }`}
-      style={{ height: 24 }}
-    >
-      {state === 'running' ? (
-        <>
-          <Square size={11} fill="currentColor" />
-          <span>Stop</span>
-        </>
-      ) : (
-        <>
-          <Play size={12} fill="currentColor" />
-          <span>{label}</span>
-        </>
-      )}
-    </button>
-  );
-}
+  
+    const label = isProject ? 'Run Project' : `Run File`;
+
+    return (
+      <div className="flex items-center gap-1.5 mr-2 relative group">
+        <button
+          onClick={handleRun}
+          className={`ide-btn flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors ${
+            state === 'running' 
+              ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
+              : state === 'completed'
+              ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+              : state === 'error'
+              ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30'
+              : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+          }`}
+          style={{ border: '1px solid currentColor', opacity: 0.8 }}
+        >
+          {state === 'running' ? (
+            <><Square size={10} className="fill-current" /><span>Stop</span></>
+          ) : state === 'completed' ? (
+            <><Play size={10} className="fill-current" /><span>Completed</span></>
+          ) : state === 'error' ? (
+            <><Play size={10} className="fill-current" /><span>Failed</span></>
+          ) : (
+            <><Play size={10} className="fill-current" /><span>{label}</span></>
+          )}
+        </button>
+        {state !== 'running' && (
+          
+          <button
+             onClick={() => {
+                useUIStore.getState().setBottomPanelVisible(true);
+                useUIStore.getState().setActiveBottomPanel('debug');
+                window.dispatchEvent(new CustomEvent('ai-web-ide:execution-error', { detail: { title: 'Debugger Not Available', message: 'No debugger configured for this runtime.' } }));
+             }}
+             className="ide-btn flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+
+             style={{ border: '1px solid currentColor', opacity: 0.8 }}
+          >
+             <Play size={10} className="fill-current rotate-90" />
+             <span>Debug</span>
+          </button>
+        )}
+      </div>
+    );
+
+  }

@@ -1,3 +1,4 @@
+import LanguageServicesEditor from './LanguageServicesEditor';
 import { useCallback } from 'react';
 import EditorTabs from './EditorTabs';
 import Breadcrumbs from './Breadcrumbs';
@@ -78,9 +79,15 @@ export default function Editor() {
       return <ExtensionDetailEditor content={activeTab.content} />;
     }
 
+    
     if (activeTab?.language === 'ide-settings') {
       return <SettingsEditor />;
     }
+
+    if (activeTab?.language === 'language-services') {
+      return <LanguageServicesEditor />;
+    }
+
 
     if (activeTab) {
       return (
@@ -129,7 +136,7 @@ export default function Editor() {
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--color-background)' }}>
       <EditorTabs />
-      {activeTab && !['thunder-request', 'extension-detail', 'ide-settings'].includes(activeTab.language) && <Breadcrumbs />}
+      {activeTab && !['thunder-request', 'extension-detail', 'ide-settings', 'language-services'].includes(activeTab.language) && <Breadcrumbs />}
       <div className="flex-1 overflow-hidden">
         {splitConfig.enabled ? (
           <div className={splitConfig.direction === 'vertical' ? 'flex h-full' : 'flex h-full flex-col'}>
@@ -145,7 +152,7 @@ export default function Editor() {
               }}
             >
               {activeTab?.language === 'html' ? (
-                <HtmlPreview content={activeTab.content} />
+                <HtmlPreview content={activeTab.content} filePath={activeTab.filePath} tabs={tabs} />
               ) : (
                 <div className="flex h-full items-center justify-center text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
                   Split editor group

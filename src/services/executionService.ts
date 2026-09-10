@@ -1,7 +1,9 @@
-import { terminalService } from './terminalService';
 import { fileService } from './fileService';
 import { useUIStore } from '../store/uiStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { runnerRegistry, ExecutionPlan } from './execution/RunnerRegistry';
+import { ProjectManager } from './execution/ProjectManager';
+import { detectLanguageFromExtension } from './execution/LanguageRegistry';
 
 export type ExecutionState = 'idle' | 'running' | 'completed' | 'error';
 
@@ -9,6 +11,23 @@ class ExecutionManager {
   private currentSessionId: string | null = null;
   private onStateChangeMap: Map<string, (state: ExecutionState) => void> = new Map();
   private states: Map<string, ExecutionState> = new Map();
+
+  constructor() {
+    window.addEventListener('ai-web-ide:terminal-completed', ((e: CustomEvent) => {
+       // When any terminal completes, we reset the running states
+       for (const [filePath, state] of this.states.entries()) {
+          if (state === 'running') {
+             this.updateState(filePath, e.detail.exitCode === 0 ? 'completed' : 'error');
+             // Auto clear completed after 3s
+             setTimeout(() => {
+                 if (this.getState(filePath) === 'completed' || this.getState(filePath) === 'error') {
+                    this.updateState(filePath, 'idle');
+                 }
+             }, 3000);
+          }
+       }
+    }) as any);
+  }
 
   subscribe(filePath: string, handler: (state: ExecutionState) => void) {
     this.onStateChangeMap.set(filePath, handler);
@@ -29,106 +48,125 @@ class ExecutionManager {
   }
 
   detectLanguage(fileName: string): string | null {
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'py': return 'python';
-      case 'js': return 'javascript';
-      case 'java': return 'java';
-      case 'c': return 'c';
-      case 'cpp': return 'cpp';
-      case 'cs': return 'csharp';
-      case 'go': return 'go';
-      case 'rs': return 'rust';
-      default: return null;
-    }
+    const lang = detectLanguageFromExtension(fileName);
+    return lang ? lang.id : null;
   }
 
   isFrameworkFile(fileName: string): boolean {
-    const fwFiles = ['App.jsx', 'App.tsx', 'main.jsx', 'main.tsx', 'page.tsx', 'app.component.ts', 'Controller.java'];
-    return fwFiles.includes(fileName);
+    return false; // Deprecated, we now rely on ProjectManager
+  }
+
+  async runProject(workspacePath: string, scriptName?: string) {
+     const plan = await ProjectManager.getProjectRunPlan(workspacePath, scriptName);
+     if (plan) {
+        this.executeCommand(plan.command + ' ' + (plan.args || []).join(' '), "Project", plan.cwd, workspacePath);
+     } else {
+        this.showExecutionError({
+            title: 'Run Project Failed',
+            message: 'No project configuration found (package.json, pom.xml, etc).',
+        });
+     }
   }
 
   async runFile(filePath: string, content: string) {
     if (this.getState(filePath) === 'running') return;
 
     const fileName = filePath.split('/').pop() || '';
-    
-    if (this.isFrameworkFile(fileName)) {
-       // Run project logic
-       this.runProject();
-       return;
-    }
-
-    const lang = this.detectLanguage(fileName);
-    if (!lang) {
-      console.warn('Language not supported for standalone execution');
-      return;
-    }
-
-    // Ensure saved
     const workspace = useWorkspaceStore.getState().workspace;
     if (!workspace) return;
     
-    const absolutePath = `${workspace.path}/${filePath}`;
-    await fileService.writeFile(absolutePath, content);
+    // Check if it's a project
+    const projectType = await ProjectManager.detectProjectType(workspace.path);
+    if (projectType && (fileName === 'package.json' || fileName === 'pom.xml' || fileName === 'build.gradle')) {
+        return this.runProject(workspace.path);
+    }
+    
+    // Fallback for HTML preview
+    const langCap = detectLanguageFromExtension(fileName);
+    if (langCap?.executionMode === 'browser-preview') {
+      useUIStore.getState().setBottomPanelVisible(true);
+      useUIStore.getState().setActiveBottomPanel('preview');
+      window.dispatchEvent(new CustomEvent('ai-web-ide:start-preview'));
+      return;
+    }
 
-    // Open terminal panel
+    const language = langCap ? langCap.id : null;
+    if (!language) {
+      this.showExecutionError({
+        title: 'Language Not Supported',
+        message: 'This file type cannot be executed directly.',
+        file: fileName
+      });
+      return;
+    }
+
+    const context = {
+       fileName: filePath,
+       language,
+       workspaceRoot: workspace.path
+    };
+
+    const runner = await runnerRegistry.getRunnerForLanguage(language, context);
+    if (!runner) {
+      this.showExecutionError({
+        title: 'Runner Not Found',
+        message: `No registered runner for ${language}.`,
+        file: fileName
+      });
+      return;
+    }
+
+    const validation = await runner.validate(context);
+    if (!validation.valid) {
+      this.showExecutionError({
+        title: 'Execution Blocked',
+        message: validation.reason || 'Missing required runtime.',
+        file: fileName
+      });
+      return;
+    }
+
+    // Save before executing
+    const absolutePath = filePath.startsWith(workspace.path) 
+      ? filePath 
+      : `${workspace.path}/${filePath}`.replace(/\/+/g, '/');
+    await fileService.writeFile(absolutePath, content);
+    
+    try {
+      await fetch('/api/files/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: filePath, content })
+      });
+    } catch (e) {
+      console.warn('Failed to sync file to backend:', e);
+    }
+
+    const plan = await runner.run(context);
+    const commandStr = `${plan.command} ${plan.args.join(' ')}`;
+    
+    this.executeCommand(commandStr, fileName, plan.cwd || workspace.path, filePath);
+  }
+
+  private executeCommand(command: string, fileName: string, cwd: string, filePath: string) {
     useUIStore.getState().setBottomPanelVisible(true);
     useUIStore.getState().setActiveBottomPanel('terminal');
 
     this.updateState(filePath, 'running');
-    
     this.currentSessionId = `exec-${Date.now()}`;
-    const command = this.resolveCommand(lang, fileName);
 
-    // Create session (uses Bash or PowerShell depending on backend OS)
-    terminalService.createSession('/bin/bash', workspace.path); 
-    // Wait for session... we can just use a delay for now, since we don't have custom ID mapping easily
-    
     setTimeout(() => {
-        // Send command
-        // \x03 is Ctrl+C in case something is running
-        const runCmd = `echo "\\x1b[32m▶ Running ${fileName}...\\x1b[0m" && ${command}`;
-        terminalService.sendData('default', `${runCmd}\r`);
-    }, 500);
-
-    // Fake completion for UI state
-    setTimeout(() => {
-       this.updateState(filePath, 'idle');
-    }, 3000);
+        window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-run', { detail: { command, fileName, cwd } }));
+    }, 150);
   }
 
-  async runProject() {
-     const workspace = useWorkspaceStore.getState().workspace;
-     if (!workspace) return;
-     useUIStore.getState().setBottomPanelVisible(true);
-     useUIStore.getState().setActiveBottomPanel('terminal');
-     
-     // Guess command based on project type. Let's just default to npm run dev
-     setTimeout(() => {
-        terminalService.sendData('default', `npm run dev\r`);
-     }, 500);
-  }
-
-  resolveCommand(lang: string, fileName: string): string {
-    const baseName = fileName.split('.').slice(0, -1).join('.');
-    switch (lang) {
-      case 'python': return `python ${fileName}`;
-      case 'javascript': return `node ${fileName}`;
-      case 'java': return `javac ${fileName} && java ${baseName}`;
-      case 'c': return `gcc ${fileName} -o ${baseName} && ./${baseName}`;
-      case 'cpp': return `g++ ${fileName} -o ${baseName} && ./${baseName}`;
-      case 'csharp': return `csc ${fileName} && ./${baseName}.exe`;
-      case 'go': return `go run ${fileName}`;
-      case 'rust': return `rustc ${fileName} && ./${baseName}`;
-      default: return `echo "Unsupported language"`;
-    }
+  private showExecutionError(error: any) {
+    window.dispatchEvent(new CustomEvent('ai-web-ide:execution-error', { detail: error }));
   }
 
   stop(filePath: string) {
     this.updateState(filePath, 'idle');
-    terminalService.sendData('default', '\x03'); // Send Ctrl+C
-    terminalService.sendData('default', `echo "\\nProcess stopped by user"\r`);
+    window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-stop'));
   }
 }
 
