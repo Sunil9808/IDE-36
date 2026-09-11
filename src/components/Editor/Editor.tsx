@@ -27,6 +27,7 @@ import {
   Star,
   X,
   LayoutTemplate,
+  Sparkles,
 } from 'lucide-react';
 
 type StartActionId = 'new-file' | 'open-file' | 'open-folder' | 'clone' | 'connect' | 'generate-workspace';
@@ -102,29 +103,7 @@ export default function Editor() {
       );
     }
 
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-[var(--color-background)] select-none">
-        <AppLogo className="mb-8 h-32 w-32 opacity-[0.03] grayscale" />
-        <div className="flex flex-col gap-3 text-[13px] text-[var(--color-textFaint)]">
-          <div className="flex justify-between gap-12">
-            <span>Show Command Palette</span>
-            <span className="font-mono opacity-60">Ctrl+Shift+P</span>
-          </div>
-          <div className="flex justify-between gap-12">
-            <span>Go to File</span>
-            <span className="font-mono opacity-60">Ctrl+P</span>
-          </div>
-          <div className="flex justify-between gap-12">
-            <span>Find in Files</span>
-            <span className="font-mono opacity-60">Ctrl+Shift+F</span>
-          </div>
-          <div className="flex justify-between gap-12">
-            <span>Open Settings</span>
-            <span className="font-mono opacity-60">Ctrl+,</span>
-          </div>
-        </div>
-      </div>
-    );
+    return <WelcomeEditor />;
   };
 
   return (
@@ -312,77 +291,51 @@ function WelcomeEditor() {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ background: '#101112', color: 'var(--color-text)' }}>
-      <div className="flex h-[52px] flex-shrink-0 items-end" style={{ background: '#181818', borderBottom: '1px solid var(--color-border)' }}>
-        <div
-          className="flex h-[52px] w-[180px] items-center gap-2 border-t px-3 text-[20px] italic"
-          style={{ background: '#101112', borderColor: '#22a6f2', borderRight: '1px solid var(--color-border)', color: '#d8d8d8' }}
-        >
-          <AppLogo className="h-[27px] w-[27px] flex-shrink-0 not-italic" />
-          <span>Welcome</span>
-          <X size={24} className="ml-auto not-italic" />
-        </div>
+    <div className="flex h-full flex-col items-center justify-center bg-[var(--color-background)] text-[var(--color-text)] select-none">
+      <div className="flex flex-col items-center mb-12">
+        <AppLogo className="mb-4 h-16 w-16 text-[var(--accent)] drop-shadow-md" />
+        <h1 className="text-3xl font-semibold tracking-tight mb-2">AI WEB IDE</h1>
+        <p className="text-[var(--color-textFaint)] text-lg tracking-wide">Build. Code. Create. Faster.</p>
       </div>
 
-      <div className="relative flex flex-1 overflow-hidden px-[8.2vw] pt-10">
-        <div className="grid w-full grid-cols-[minmax(360px,650px)_minmax(520px,686px)] gap-[7.2vw]">
-          <section className="pl-[2.6vw]">
-            <h1 className="mb-4 text-[30px] font-normal leading-tight">Start</h1>
-            <div className="flex flex-col gap-3">
-              {startItems.map(({ id, label, icon: Icon }) => (
-                <button key={label} className="flex items-center gap-4 text-left text-[20px] leading-none" style={{ color: '#22a6f2' }} onClick={() => runStartAction(id)}>
-                  <Icon size={31} strokeWidth={1.7} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-
-            <h2 className="mb-4 mt-10 text-[30px] font-normal leading-tight">Recent</h2>
-            <div className="flex flex-col gap-2 text-[20px]">
-              {recentItems.map(([name, path]) => (
-                <button key={`${name}-${path}`} className="grid grid-cols-[172px_1fr] text-left leading-tight" onClick={() => openRecent(name, path)}>
-                  <span style={{ color: '#22a6f2' }}>{name}</span>
-                  <span className="truncate" style={{ color: '#d8d8d8' }}>{path}</span>
-                </button>
-              ))}
-              <button className="text-left text-[20px]" style={{ color: '#22a6f2' }} onClick={() => window.dispatchEvent(new CustomEvent('ai-web-ide:open-folder', { detail: { mode: 'open' } }))}>
-                More...
-              </button>
-            </div>
-          </section>
-
-          <section>
-            <h1 className="mb-4 text-[30px] font-normal leading-tight">Walkthroughs</h1>
-            <div className="flex max-w-[686px] flex-col gap-6">
-              {walkthroughs.map((item) => (
-                <WalkthroughCard key={item.title} {...item} onClick={() => openWalkthrough(item.title, item.description)} />
-              ))}
-              <button className="-mt-2 text-left text-[20px]" style={{ color: '#22a6f2' }} onClick={() => openWalkthrough('More Walkthroughs')}>
-                More...
-              </button>
-            </div>
-          </section>
-        </div>
-
+      <div className="flex gap-6 mb-16">
         <button
-          className="absolute bottom-[102px] left-1/2 flex h-[58px] -translate-x-1/2 items-center gap-4 rounded-full px-6 text-[20px] font-semibold"
-          style={{ background: '#2b2b2b', color: '#d8d8d8' }}
-          onClick={() => {
-            setRightPanelVisible(true);
-            notify('Agents window opened', 'success');
-          }}
+          onClick={() => runStartAction('open-folder')}
+          className="flex flex-col items-center justify-center gap-3 w-40 h-32 rounded-xl bg-[var(--color-sidebar)] border border-[var(--color-border)] hover:border-[var(--accent)] hover:bg-[var(--glass-bg)] transition-all cursor-pointer group shadow-sm hover:shadow-[var(--accent-glow)]"
         >
-          <Code2 size={30} style={{ color: '#22a6f2' }} />
-          Try out the new Agents window
+          <FolderOpen size={32} className="text-[var(--color-textMuted)] group-hover:text-[var(--accent)] transition-colors" />
+          <span className="font-medium">Open Project</span>
         </button>
 
-        <label className="absolute bottom-[18px] left-1/2 flex -translate-x-1/2 items-center gap-3 text-[20px]" style={{ color: '#d8d8d8' }}>
-          <input className="sr-only" type="checkbox" defaultChecked onChange={(event) => notify(`Welcome page on startup ${event.currentTarget.checked ? 'enabled' : 'disabled'}`, 'success')} />
-          <span className="flex h-[28px] w-[28px] items-center justify-center rounded border" style={{ borderColor: '#5a5a5a', background: '#242424' }}>
-            <Check size={20} style={{ color: '#8e8e8e' }} />
-          </span>
-          <span>Show welcome page on startup</span>
-        </label>
+        <button
+          onClick={() => runStartAction('generate-workspace')}
+          className="flex flex-col items-center justify-center gap-3 w-40 h-32 rounded-xl bg-[var(--color-sidebar)] border border-[var(--color-border)] hover:border-[var(--accent)] hover:bg-[var(--glass-bg)] transition-all cursor-pointer group shadow-sm hover:shadow-[var(--accent-glow)]"
+        >
+          <Sparkles size={32} className="text-[var(--color-textMuted)] group-hover:text-[var(--accent)] transition-colors" />
+          <span className="font-medium">New Project</span>
+        </button>
+      </div>
+
+      <div className="flex flex-col items-center w-full max-w-md">
+        <h2 className="text-sm font-semibold text-[var(--color-textMuted)] uppercase tracking-wider mb-4">Recent Projects</h2>
+        <div className="flex flex-col w-full gap-2">
+          {recentItems.length > 0 ? (
+            recentItems.map(([name, path]) => (
+              <button
+                key={`${name}-${path}`}
+                onClick={() => openRecent(name, path)}
+                className="flex items-center justify-between px-4 py-3 rounded-lg hover:bg-[var(--color-hover)] transition-colors text-left group"
+              >
+                <span className="font-medium group-hover:text-[var(--accent)] transition-colors">{name}</span>
+                <span className="text-xs text-[var(--color-textFaint)] truncate max-w-[200px]">{path}</span>
+              </button>
+            ))
+          ) : (
+            <div className="text-center py-4 text-[var(--color-textFaint)] text-sm italic">
+              No recent projects found
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

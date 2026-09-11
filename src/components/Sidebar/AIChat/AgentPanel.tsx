@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Play, FileCode, CheckCircle, CircleDashed, Loader2, AlertTriangle, Check, Paperclip, Plus, Image, AtSign, Zap, Globe, MessageCircle, Edit2, Bug, Bot, ChevronUp } from 'lucide-react';
+import { Play, FileCode, CheckCircle, CircleDashed, Loader2, AlertTriangle, Check, Paperclip, Plus, Image, AtSign, Zap, Globe, MessageCircle, Edit2, Bug, Bot, ChevronUp, Sparkles } from 'lucide-react';
 
 import { useEditorStore } from '../../../store/editorStore';
 import { useWorkspaceStore } from '../../../store/workspaceStore';
@@ -732,24 +732,25 @@ export function AgentPanel({}: AgentPanelProps) {
               
             </div>
             
-            {/* Right side placeholder if needed */}
-            <div />
+            {/* Right side Generate button */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[var(--text-2)] hidden xl:inline-block font-mono">⌘ Enter</span>
+              <button
+                onClick={() => handlePlan(false)}
+                disabled={isPlanning || isApplying || (!task.trim() && !pendingQuestion) || (!workspace || workspace.type !== 'local')}
+                className="px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-h)] text-white text-xs rounded-md font-medium flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                {isPlanning || isApplying ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                {isPlanning || isApplying ? 'Working...' : 'Generate'}
+              </button>
+            </div>
           </div>
         </div>
-        {(!workspace || workspace.type !== 'local') ? (
+        {(!workspace || workspace.type !== 'local') && (
           <div className="mt-3 p-3 text-sm text-[var(--warning)] bg-[#f59e0b1a] border border-[#f59e0b33] rounded-lg flex items-start gap-2">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-            <span className="break-words">Please open a folder from your local computer first to use the AI Pair.</span>
+            <span className="break-words">Please open a local folder to use the AI Pair.</span>
           </div>
-        ) : (
-          <button
-            onClick={() => handlePlan(false)}
-            disabled={isPlanning || isApplying || (!task.trim() && !pendingQuestion)}
-            className="mt-3 w-full py-2 bg-[var(--accent)] hover:bg-[var(--accent-h)] text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-          >
-            {isPlanning || isApplying ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-            {isPlanning || isApplying ? 'Working...' : 'Run Task'}
-          </button>
         )}
         {applyError && (
           <div className="mt-3 p-3 text-sm text-[var(--error)] bg-[#dc26261a] border border-[#dc262633] rounded-lg flex items-start gap-2">

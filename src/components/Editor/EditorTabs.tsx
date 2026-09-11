@@ -158,24 +158,23 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
     <button
       onClick={handleRun}
       title={state === 'running' ? 'Stop' : label}
-      className={`flex items-center justify-center w-[26px] h-[26px] rounded transition-colors ${
+      className={`flex items-center gap-2 px-3 h-[24px] rounded text-xs font-medium transition-colors ${
         state === 'running'
-          ? 'text-red-400 hover:bg-red-500/20'
-          : state === 'completed'
-          ? 'text-blue-400 hover:bg-blue-500/20'
-          : state === 'error'
-          ? 'text-orange-400 hover:bg-orange-500/20'
-          : 'text-green-400 hover:bg-green-500/20'
+          ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20'
+          : 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20'
       }`}
     >
       {state === 'running' ? (
-        <Square size={13} className="fill-current" />
-      ) : state === 'completed' ? (
-        <Play size={13} className="fill-current" />
-      ) : state === 'error' ? (
-        <Play size={13} className="fill-current" />
+        <>
+          <Square size={10} className="fill-current" />
+          <span>Stop</span>
+        </>
       ) : (
-        <Play size={13} className="fill-current" />
+        <>
+          <Play size={10} className="fill-current" />
+          <span>Run</span>
+          {lang && <span className="text-[10px] opacity-70 border-l border-green-500/30 pl-2 ml-1">{lang.toUpperCase()}</span>}
+        </>
       )}
     </button>
   );

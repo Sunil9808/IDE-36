@@ -62,27 +62,59 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   };
 
   return (
-    <div className={`flex flex-col mb-4 ${isUser ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-      <div className={`flex max-w-[95%] ${isUser ? 'flex-row-reverse' : 'flex-row'} gap-3`}>
-        {/* Avatar */}
-        <div className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full shadow-sm border ${isUser ? 'bg-blue-600/20 border-blue-500/30 text-blue-400' : 'bg-[#22a6f2]/20 border-[#22a6f2]/30 text-[#22a6f2]'}`}>
-          {isUser ? <User size={16} /> : <Sparkles size={16} />}
+    <div className={`flex flex-col mb-6 w-full animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+      {isUser ? (
+        <div className="flex w-full justify-end">
+          <div className="max-w-[90%] p-3 border border-[var(--border-2)] bg-[var(--bg-2)] text-[var(--text-0)] rounded-xl rounded-tr-sm shadow-sm text-[13.5px] leading-relaxed">
+            <ReactMarkdown
+              components={{
+                a({node, href, children, ...props}) {
+                  if (href && (href.startsWith('/') || href.startsWith('./') || href.startsWith('src/') || href.includes('.'))) {
+                    return (
+                      <a 
+                        href={href} 
+                        onClick={(e) => handleFileClick(e, href)}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded bg-[var(--accent-dim)] hover:bg-blue-500/20 text-[var(--accent)] hover:text-blue-300 transition-colors no-underline cursor-pointer border border-blue-500/20"
+                        title={`Open ${href}`}
+                        {...props}
+                      >
+                        <FileText size={12} className="opacity-70" />
+                        <span>{children}</span>
+                      </a>
+                    );
+                  }
+                  return <a href={href} className="text-[var(--accent)] hover:underline" target="_blank" rel="noreferrer" {...props}>{children}</a>;
+                },
+                code({node, inline, className, children, ...props}: any) {
+                  return inline ? (
+                    <code className="bg-[var(--bg-4)] rounded px-1.5 py-0.5 text-[var(--text-0)] font-mono text-[12px]" {...props}>
+                      {children}
+                    </code>
+                  ) : <span className="font-mono">{children}</span>;
+                }
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
         </div>
-        
-        {/* Content */}
-        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} min-w-0 flex-1 overflow-hidden`}>
-          <div className={`w-full p-3 rounded-2xl ${isUser ? 'bg-[#2a313a] text-gray-200 rounded-tr-sm' : 'bg-transparent text-gray-300'}`}>
-            <div className="prose prose-invert max-w-none text-[13.5px] leading-relaxed break-words">
+      ) : (
+        <div className="flex flex-col w-full">
+          <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-[var(--text-1)] uppercase tracking-wider">
+            <Sparkles size={14} className="text-[var(--accent)]" />
+            <span>AI Pair</span>
+          </div>
+          <div className="w-full text-[var(--text-0)] text-[13.5px] leading-relaxed">
+            <div className="prose prose-invert max-w-none break-words">
               <ReactMarkdown
                 components={{
                   a({node, href, children, ...props}) {
                     if (href && (href.startsWith('/') || href.startsWith('./') || href.startsWith('src/') || href.includes('.'))) {
-                      // Heuristic for local file paths
                       return (
                         <a 
                           href={href} 
                           onClick={(e) => handleFileClick(e, href)}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-colors no-underline cursor-pointer border border-blue-500/20"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded bg-[var(--accent-dim)] hover:bg-blue-500/20 text-[var(--accent)] hover:text-blue-300 transition-colors no-underline cursor-pointer border border-blue-500/20"
                           title={`Open ${href}`}
                           {...props}
                         >
@@ -91,58 +123,53 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
                         </a>
                       );
                     }
-                    return <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noreferrer" {...props}>{children}</a>;
+                    return <a href={href} className="text-[var(--accent)] hover:underline" target="_blank" rel="noreferrer" {...props}>{children}</a>;
                   },
                   code({node, inline, className, children, ...props}: any) {
                     const match = /language-(\w+)/.exec(className || '');
-                    // Use custom CodeBlock for block code, standard code tag for inline
                     return !inline && match ? (
                       <CodeBlock language={match[1]} code={String(children).replace(/\n$/, '')} />
                     ) : !inline ? (
                       <CodeBlock language="text" code={String(children).replace(/\n$/, '')} />
                     ) : (
-                      <code className="bg-gray-800 rounded px-1.5 py-0.5 text-[#e2e8f0] font-mono text-[12px]" {...props}>
+                      <code className="bg-[var(--bg-4)] rounded px-1.5 py-0.5 text-[var(--text-0)] font-mono text-[12px]" {...props}>
                         {children}
                       </code>
                     )
                   },
-                  p({children}) {
-                    return <p className="mb-2 last:mb-0">{children}</p>
-                  },
-                  ul({children}) {
-                    return <ul className="list-disc pl-4 mb-2">{children}</ul>
-                  },
-                  ol({children}) {
-                    return <ol className="list-decimal pl-4 mb-2">{children}</ol>
-                  }
+                  p({children}) { return <p className="mb-2 last:mb-0">{children}</p>; },
+                  ul({children}) { return <ul className="list-disc pl-4 mb-2">{children}</ul>; },
+                  ol({children}) { return <ol className="list-decimal pl-4 mb-2">{children}</ol>; },
+                  li({children}) { return <li className="pl-1 mb-1 relative before:content-['✓'] before:absolute before:-left-4 before:text-[var(--success)]">{children}</li>; }
                 }}
               >
                 {message.content}
               </ReactMarkdown>
               {message.isStreaming && (
-                <span className="inline-block w-2 h-4 ml-1 bg-[#47d6b6] animate-pulse align-middle" />
+                <span className="inline-block w-2 h-4 ml-1 bg-[var(--accent)] animate-pulse align-middle" />
               )}
             </div>
           </div>
           
           {/* Metadata */}
-          {!isUser && !message.isStreaming && (message.latencyMs || message.tokenCount) && (
-            <div className="flex items-center gap-3 mt-1.5 px-2 text-[10px] text-gray-500">
-              {message.modelUsed && <span>{message.modelUsed}</span>}
+          {!message.isStreaming && (message.latencyMs || message.tokenCount) && (
+            <div className="flex items-center gap-3 mt-3 px-1 text-[10px] text-[var(--text-2)] font-mono">
               {message.latencyMs && (
                 <span className="flex items-center gap-1">
-                  <Clock size={10} /> {(message.latencyMs / 1000).toFixed(1)}s
+                  <Clock size={10} />
+                  {(message.latencyMs / 1000).toFixed(1)}s
                 </span>
               )}
               {message.tokenCount && (
                 <span className="flex items-center gap-1">
-                  <Coins size={10} /> {message.tokenCount} tokens
+                  <Coins size={10} />
+                  {message.tokenCount.toLocaleString()}
                 </span>
               )}
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 };
