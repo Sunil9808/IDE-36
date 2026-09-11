@@ -26,6 +26,7 @@ import {
   Network,
   Star,
   X,
+  LayoutTemplate,
 } from 'lucide-react';
 
 type StartActionId = 'new-file' | 'open-file' | 'open-folder' | 'clone' | 'connect' | 'generate-workspace';
@@ -92,7 +93,6 @@ export default function Editor() {
     if (activeTab) {
       return (
         <MonacoEditor
-          key={activeTab.id}
           tabId={activeTab.id}
           filePath={activeTab.filePath}
           content={activeTab.content}
@@ -103,31 +103,25 @@ export default function Editor() {
     }
 
     return (
-      <div
-        className="h-full w-full"
-        style={{
-          backgroundImage: 'url("https://img.freepik.com/premium-photo/elegant-dark-background-designs_1199394-20502.jpg")',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          position: 'relative',
-        }}
-      >
-        {/* Subtle overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(135deg, rgba(10,14,20,0.55) 0%, rgba(0,0,0,0.3) 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: 13, letterSpacing: '0.06em', fontFamily: 'Inter, sans-serif' }}>
-            Open a file to start editing
-          </span>
+      <div className="flex h-full w-full flex-col items-center justify-center bg-[var(--color-background)] select-none">
+        <AppLogo className="mb-8 h-32 w-32 opacity-[0.03] grayscale" />
+        <div className="flex flex-col gap-3 text-[13px] text-[var(--color-textFaint)]">
+          <div className="flex justify-between gap-12">
+            <span>Show Command Palette</span>
+            <span className="font-mono opacity-60">Ctrl+Shift+P</span>
+          </div>
+          <div className="flex justify-between gap-12">
+            <span>Go to File</span>
+            <span className="font-mono opacity-60">Ctrl+P</span>
+          </div>
+          <div className="flex justify-between gap-12">
+            <span>Find in Files</span>
+            <span className="font-mono opacity-60">Ctrl+Shift+F</span>
+          </div>
+          <div className="flex justify-between gap-12">
+            <span>Open Settings</span>
+            <span className="font-mono opacity-60">Ctrl+,</span>
+          </div>
         </div>
       </div>
     );
@@ -154,8 +148,9 @@ export default function Editor() {
               {activeTab?.language === 'html' ? (
                 <HtmlPreview content={activeTab.content} filePath={activeTab.filePath} tabs={tabs} />
               ) : (
-                <div className="flex h-full items-center justify-center text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
-                  Split editor group
+                <div className="flex h-full flex-col items-center justify-center text-[13px] bg-[var(--color-sidebar)]" style={{ color: 'var(--color-textFaint)' }}>
+                  <LayoutTemplate size={48} className="mb-4 opacity-20" />
+                  <span>Live Preview is only available for HTML files</span>
                 </div>
               )}
             </div>

@@ -111,10 +111,10 @@ export default function EditorTabs() {
   );
 }
 
-import { Play, Square, Pause, Loader2 } from 'lucide-react';
+import { Play, Square } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { executionService, ExecutionState } from '../../services/executionService';
-import { projectService } from '../../services/projectService';
+
 
 function RunButton({ activeTabId }: { activeTabId: string | null }) {
   const { tabs } = useEditorStore();
@@ -152,51 +152,33 @@ function RunButton({ activeTabId }: { activeTabId: string | null }) {
     return () => window.removeEventListener('ai-web-ide:terminal-run-active', fn);
   }, [state, activeTab]);
 
-  
-    const label = isProject ? 'Run Project' : `Run File`;
+  const label = isProject ? 'Run Project' : 'Run File';
 
-    return (
-      <div className="flex items-center gap-1.5 mr-2 relative group">
-        <button
-          onClick={handleRun}
-          className={`ide-btn flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors ${
-            state === 'running' 
-              ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
-              : state === 'completed'
-              ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
-              : state === 'error'
-              ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30'
-              : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-          }`}
-          style={{ border: '1px solid currentColor', opacity: 0.8 }}
-        >
-          {state === 'running' ? (
-            <><Square size={10} className="fill-current" /><span>Stop</span></>
-          ) : state === 'completed' ? (
-            <><Play size={10} className="fill-current" /><span>Completed</span></>
-          ) : state === 'error' ? (
-            <><Play size={10} className="fill-current" /><span>Failed</span></>
-          ) : (
-            <><Play size={10} className="fill-current" /><span>{label}</span></>
-          )}
-        </button>
-        {state !== 'running' && (
-          
-          <button
-             onClick={() => {
-                useUIStore.getState().setBottomPanelVisible(true);
-                useUIStore.getState().setActiveBottomPanel('debug');
-                window.dispatchEvent(new CustomEvent('ai-web-ide:execution-error', { detail: { title: 'Debugger Not Available', message: 'No debugger configured for this runtime.' } }));
-             }}
-             className="ide-btn flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium transition-colors bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+  return (
+    <button
+      onClick={handleRun}
+      title={state === 'running' ? 'Stop' : label}
+      className={`flex items-center justify-center w-[26px] h-[26px] rounded transition-colors ${
+        state === 'running'
+          ? 'text-red-400 hover:bg-red-500/20'
+          : state === 'completed'
+          ? 'text-blue-400 hover:bg-blue-500/20'
+          : state === 'error'
+          ? 'text-orange-400 hover:bg-orange-500/20'
+          : 'text-green-400 hover:bg-green-500/20'
+      }`}
+    >
+      {state === 'running' ? (
+        <Square size={13} className="fill-current" />
+      ) : state === 'completed' ? (
+        <Play size={13} className="fill-current" />
+      ) : state === 'error' ? (
+        <Play size={13} className="fill-current" />
+      ) : (
+        <Play size={13} className="fill-current" />
+      )}
+    </button>
+  );
 
-             style={{ border: '1px solid currentColor', opacity: 0.8 }}
-          >
-             <Play size={10} className="fill-current rotate-90" />
-             <span>Debug</span>
-          </button>
-        )}
-      </div>
-    );
+}
 
-  }

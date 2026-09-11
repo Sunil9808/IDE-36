@@ -742,15 +742,7 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
 
 
   return (
-    <div
-      className={`relative h-full w-full ${showEmptyEditorBackground ? 'empty-monaco-background' : ''}`}
-      style={showEmptyEditorBackground ? {
-        backgroundImage: `url("${EMPTY_EDITOR_BACKGROUND_IMAGE}")`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      } : undefined}
-    >
+    <div className="relative h-full w-full">
         <MonacoEditorReact
           height="100%"
           path={filePath}
