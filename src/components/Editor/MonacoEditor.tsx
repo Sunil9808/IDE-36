@@ -119,7 +119,10 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
 
     // Keyboard shortcuts
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      handleSave(editor, filePath, tabId);
+      const activeTab = useEditorStore.getState().getActiveTab();
+      if (activeTab) {
+        handleSave(editor, activeTab.filePath, activeTab.id);
+      }
     });
 
     editor.onContextMenu((event: Monaco.editor.IEditorMouseEvent) => {
@@ -690,55 +693,9 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
   }, []);
 
   
-  // Manage Monaco Models per URI
-  useEffect(() => {
-    const editor = editorRef.current;
-    const monaco = monacoRef.current;
-    if (!editor || !monaco || !filePath) return;
 
-    let uriString = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
-    const uri = monaco.Uri.parse(uriString);
-    
-    let model = monaco.editor.getModel(uri);
-    
-    if (!model) {
-      // Create new model
-      model = monaco.editor.createModel(content, language, uri);
-    } else {
-      // Sync content if it changed externally (not by the editor)
-      if (model.getValue() !== content && editor.getModel() !== model) {
-         model.setValue(content);
-      }
-    }
-    
-    if (editor.getModel() !== model) {
-      editor.setModel(model);
-    }
-    
-    editor.focus();
-    
-    // Update language if it changed
-    if (model.getLanguageId() !== language) {
-       monaco.editor.setModelLanguage(model, language);
-    }
-  }, [tabId, filePath, language, monacoRef.current, editorRef.current]);
 
-  // Update content when model changes
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (editor && editor.getModel()) {
-      const model = editor.getModel();
-      if (model && model.getValue() !== content) {
-        editor.pushUndoStop();
-        model.pushEditOperations(
-          [],
-          [{ range: model.getFullModelRange(), text: content }],
-          () => null
-        );
-        editor.pushUndoStop();
-      }
-    }
-  }, [content]);
+
 
 
   return (
