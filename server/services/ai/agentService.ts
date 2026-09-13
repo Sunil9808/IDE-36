@@ -1261,6 +1261,8 @@ export async function runStreamingPairProgrammerAgent(
           try {
             const parsedChunk = JSON.parse(dataStr);
             if (parsedChunk.error) {
+              // Emit error to client so user sees it, then throw to stop accumulation
+              res.write(`data: ${JSON.stringify({ type: 'tool_error', tool: 'plan', target: 'architecture', error: parsedChunk.error })}\\n\\n`);
               throw new Error(parsedChunk.error);
             }
             const text = parsedChunk.choices?.[0]?.delta?.content || '';
@@ -1282,7 +1284,7 @@ export async function runStreamingPairProgrammerAgent(
             }
           } catch (e: any) {
             if (e.message && dataStr.includes('"error"')) {
-              // If it's the specific error we threw from parsedChunk.error, re-throw it so streamChatResponse fails!
+              // Re-throw API errors so streamChatResponse stops
               throw e;
             }
           }
@@ -1294,12 +1296,14 @@ export async function runStreamingPairProgrammerAgent(
       flushHeaders: () => {}
     };
 
+
     res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: 'analyze', target: 'project', status: 'success' })}\n\n`);
     res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'plan', target: 'architecture', message: 'Planning implementation...' })}\n\n`);
     
     try {
       const { streamChatResponse } = await import('./aiService');
-      await streamChatResponse(prompt, context, fakeRes as any, conversationHistory);
+      await streamChatResponse(prompt, context, fakeRes as any, conversationHistory, { profile: { maxTokens: 16384 } });
+
       rawText = accumulated;
     } catch (err) {
       // If the LLM throws (e.g. timeout), we still want to try and salvage the accumulated text!
