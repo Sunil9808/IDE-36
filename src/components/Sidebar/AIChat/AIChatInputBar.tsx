@@ -51,7 +51,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col bg-[var(--bg-0)] border border-[var(--border-1)] rounded-2xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-md overflow-hidden">
+    <div className="relative flex flex-col bg-[var(--bg-0)] border border-[var(--border-1)] rounded-2xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-md">
       <textarea
         ref={textareaRef}
         value={value}
@@ -60,10 +60,10 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
         placeholder={placeholder}
         rows={2}
         disabled={disabled || isStreamingOrRunning}
-        className="w-full bg-transparent text-sm p-3.5 resize-none min-h-[70px] max-h-[160px] outline-none custom-scrollbar disabled:opacity-60 text-[var(--text-0)] placeholder-[var(--text-3)]"
+        className="w-full bg-transparent text-sm p-3.5 resize-none min-h-[70px] max-h-[160px] outline-none custom-scrollbar disabled:opacity-60 text-[var(--text-0)] placeholder-[var(--text-3)]/60 rounded-t-2xl"
       />
 
-      <div className="flex items-center justify-between px-3 py-2 border-t border-[var(--border-0)]/40 bg-[var(--bg-1)]/40 rounded-b-2xl">
+      <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-1)]/30 rounded-b-2xl">
         {/* Left Side: Plus Menu + Mode Switcher [ Chat | Cowork ] */}
         <div className="flex items-center gap-2">
           <PlusMenu onFileSelect={onFileSelect} />

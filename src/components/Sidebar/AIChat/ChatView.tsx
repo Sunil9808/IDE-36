@@ -127,7 +127,7 @@ export const ChatView: React.FC = () => {
           onFileSelect={handleFileSelect}
           hasMessages={hasMessages}
           onClearMessages={clearMessages}
-          placeholder="Ask anything, @ to mention, / for commands"
+          placeholder="How can I help you today?"
         />
       </div>
     </div>
