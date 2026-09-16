@@ -13,6 +13,7 @@ import { DiffEditor } from '@monaco-editor/react';
 import { aiService } from '../../../services/aiService';
 import { ModelSelector } from './ModelSelector';
 import { WelcomeScreen } from './WelcomeScreen';
+import { PlusMenu } from './PlusMenu';
 
 interface Action {
   type: string;
@@ -716,79 +717,52 @@ export function AgentPanel({}: AgentPanelProps) {
             disabled={!workspace || workspace.type !== 'local'}
           />
           
-          <div className="flex items-center justify-between p-2">
-            <div className="flex items-center gap-1">
-              <div className="relative shrink-0">
-                <button 
-                  onClick={() => setShowAttachMenu(!showAttachMenu)}
-                  className="p-1.5 text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] rounded-md transition-colors flex items-center justify-center"
-                  title="Add Context"
-                >
-                  <Plus size={16} />
-                </button>
-                
-                {showAttachMenu && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowAttachMenu(false)} />
-                    <div className="absolute bottom-full left-0 mb-2 w-48 bg-[var(--bg-1)] border border-[var(--border-0)] rounded-lg shadow-lg overflow-hidden flex flex-col z-50 animate-in fade-in zoom-in-95 duration-200">
-                      <div className="px-3 py-2 text-xs font-semibold text-[var(--text-2)] border-b border-[var(--border-0)] bg-[var(--bg-2)]/50">
-                        Add Context
-                      </div>
-                      <button 
-                        onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
-                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
-                      >
-                        <Image size={14} /> Media
-                      </button>
-                      <button 
-                        onClick={() => { alert("Mentions coming soon!"); setShowAttachMenu(false); }}
-                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
-                      >
-                        <AtSign size={14} /> Mentions
-                      </button>
-                      <button 
-                        onClick={() => { alert("Actions coming soon!"); setShowAttachMenu(false); }}
-                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
-                      >
-                        <Zap size={14} /> Actions
-                      </button>
-                      <button 
-                        onClick={() => { alert("Browser coming soon!"); setShowAttachMenu(false); }}
-                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
-                      >
-                        <Globe size={14} /> Browser
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+          <div className="flex items-center justify-between p-2 border-t border-[var(--border-0)]/40 bg-[var(--bg-1)]/30 rounded-b-xl">
+            <div className="flex items-center gap-2">
+              <PlusMenu onFileSelect={(files) => {
+                Array.from(files).forEach((file) => {
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const content = reader.result as string;
+                    if (file.type.startsWith('image/')) {
+                      setTask((prev) => `${prev}\n![${file.name}](${content})`.trim());
+                    } else {
+                      setTask((prev) => `${prev}\n\`\`\`${file.name}\n${content.slice(0, 10000)}\n\`\`\``.trim());
+                    }
+                  };
+                  if (file.type.startsWith('image/')) {
+                    reader.readAsDataURL(file);
+                  } else {
+                    reader.readAsText(file);
+                  }
+                });
+              }} />
               
               <ModelSelector />
-              
             </div>
             
-            {/* Right side placeholder if needed */}
-            <div />
+            <div className="flex items-center gap-1">
+              {(!workspace || workspace.type !== 'local') ? (
+                <div className="text-xs text-[var(--warning)] flex items-center gap-1 px-2 py-1 bg-[#f59e0b1a] rounded">
+                  <AlertTriangle size={13} /> Open local folder
+                </div>
+              ) : (
+                <button
+                  onClick={() => handlePlan(false)}
+                  disabled={isPlanning || isApplying || (!task.trim() && !pendingQuestion)}
+                  className="px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-h)] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                >
+                  {isPlanning || isApplying ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  {isPlanning || isApplying ? 'Working...' : 'Run Task'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
-        {(!workspace || workspace.type !== 'local') ? (
-          <div className="mt-3 p-3 text-sm text-[var(--warning)] bg-[#f59e0b1a] border border-[#f59e0b33] rounded-lg flex items-start gap-2">
-            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-            <span className="break-words">Please open a folder from your local computer first to use the AI Pair.</span>
-          </div>
-        ) : (
-          <button
-            onClick={() => handlePlan(false)}
-            disabled={isPlanning || isApplying || (!task.trim() && !pendingQuestion)}
-            className="mt-3 w-full py-2 bg-[var(--accent)] hover:bg-[var(--accent-h)] text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-          >
-            {isPlanning || isApplying ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-            {isPlanning || isApplying ? 'Working...' : 'Run Task'}
-          </button>
-        )}
+
         {applyError && (
-          <div className="mt-3 p-3 text-sm text-[var(--error)] bg-[#dc26261a] border border-[#dc262633] rounded-lg flex items-start gap-2">
-            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <div className="mt-2 p-2.5 text-xs text-[var(--error)] bg-[#dc26261a] border border-[#dc262633] rounded-lg flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <span className="break-words">{applyError}</span>
           </div>
         )}

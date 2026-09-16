@@ -4,6 +4,8 @@ import { useAIChat } from "../../../hooks/useAIChat";
 import { useAIStore } from "../../../store/aiStore";
 import { MessageBubble } from "./MessageBubble";
 import { WelcomeScreen } from "./WelcomeScreen";
+import { PlusMenu } from "./PlusMenu";
+import { ModelSelector } from "./ModelSelector";
 
 /**
  * ChatView - the direct-chat mode of the AI panel.
@@ -18,6 +20,25 @@ export const ChatView: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleFileSelect = (files: FileList) => {
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const content = reader.result as string;
+        if (file.type.startsWith('image/')) {
+          setInput((prev) => `${prev}\n![${file.name}](${content})`.trim());
+        } else {
+          setInput((prev) => `${prev}\n\`\`\`${file.name}\n${content.slice(0, 10000)}\n\`\`\``.trim());
+        }
+      };
+      if (file.type.startsWith('image/')) {
+        reader.readAsDataURL(file);
+      } else {
+        reader.readAsText(file);
+      }
+    });
+  };
 
   // Fetch models on first mount if not loaded
   useEffect(() => {
@@ -114,57 +135,56 @@ export const ChatView: React.FC = () => {
       )}
 
       {/* Input area */}
-      <div className="flex-shrink-0 border-t border-[var(--border-0)] p-2">
-        <div className="flex items-end gap-2 bg-[var(--bg-2)] rounded-xl border border-[var(--border-0)] px-3 py-2 focus-within:border-[var(--accent)] transition-colors">
+      <div className="flex-shrink-0 border-t border-[var(--border-0)] p-3">
+        <div className="relative flex flex-col bg-[var(--bg-0)] border border-[var(--border-1)] rounded-xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-sm">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder="Ask anything, @ to mention, / for commands"
-            rows={1}
+            rows={2}
             disabled={isStreaming}
-            className="flex-1 bg-transparent text-[13px] text-[var(--text-0)] placeholder-[var(--text-3)] resize-none outline-none min-h-[20px] max-h-[160px] py-0.5 custom-scrollbar disabled:opacity-60"
+            className="w-full bg-transparent text-sm p-3 resize-none min-h-[60px] max-h-[160px] outline-none custom-scrollbar disabled:opacity-60 text-[var(--text-0)] placeholder-[var(--text-3)]"
           />
-          <div className="flex items-center gap-1 flex-shrink-0 pb-0.5">
-            {hasMessages && (
-              <button
-                onClick={clearMessages}
-                title="Clear conversation"
-                className="p-1.5 text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--bg-1)] rounded-lg transition-colors"
-              >
-                <Trash2 size={15} />
-              </button>
-            )}
-            {isStreaming ? (
-              <button
-                onClick={cancelStream}
-                title="Stop generation"
-                className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
-              >
-                <Square size={15} />
-              </button>
-            ) : (
-              <button
-                onClick={handleSend}
-                disabled={!input.trim()}
-                title="Send message (Enter)"
-                className="p-1.5 bg-[var(--accent)] hover:opacity-90 text-white rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Send size={15} />
-              </button>
-            )}
+
+          <div className="flex items-center justify-between p-2 border-t border-[var(--border-0)]/40 bg-[var(--bg-1)]/30 rounded-b-xl">
+            <div className="flex items-center gap-2">
+              <PlusMenu onFileSelect={handleFileSelect} />
+              <ModelSelector />
+            </div>
+
+            <div className="flex items-center gap-1">
+              {hasMessages && (
+                <button
+                  onClick={clearMessages}
+                  title="Clear conversation"
+                  className="p-1.5 text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--bg-2)] rounded-lg transition-colors"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+              {isStreaming ? (
+                <button
+                  onClick={cancelStream}
+                  title="Stop generation"
+                  className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                >
+                  <Square size={15} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim()}
+                  title="Send message (Enter)"
+                  className="p-1.5 bg-[var(--accent)] hover:opacity-90 text-white rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Send size={15} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
-        <p className="text-[10px] text-[var(--text-3)] text-center mt-1">
-          {isStreaming ? (
-            <span className="flex items-center justify-center gap-1">
-              <Sparkles size={10} className="animate-pulse" /> Generating...
-            </span>
-          ) : (
-            "Enter to send \xb7 Shift+Enter for newline"
-          )}
-        </p>
       </div>
     </div>
   );
