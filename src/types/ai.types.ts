@@ -138,6 +138,8 @@ export interface AISettings {
   includeWorkspaceContext: boolean;
   inlineCompletionsEnabled: boolean;
   inlineCompletionsDelay: number;
+  webSearchEnabled?: boolean;
+  memoryEnabled?: boolean;
 }
 
 // ── NLU Types ─────────────────────────────────────────────────────────────────

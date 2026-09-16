@@ -14,6 +14,7 @@ import { aiService } from '../../../services/aiService';
 import { ModelSelector } from './ModelSelector';
 import { WelcomeScreen } from './WelcomeScreen';
 import { PlusMenu } from './PlusMenu';
+import { AIChatInputBar } from './AIChatInputBar';
 
 interface Action {
   type: string;
@@ -694,71 +695,40 @@ export function AgentPanel({}: AgentPanelProps) {
         </div>
       )}
 
-      <div className="flex-shrink-0 mt-2 pt-4 border-t border-[var(--border-0)]">
-        <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--accent)' }}>
-          AI Pair
-        </label>
-        <div className="relative flex flex-col bg-[var(--bg-0)] border border-[var(--border-1)] rounded-xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-sm">
-          <input type="file" ref={fileInputRef} onChange={handleFileAttach} className="hidden" />
-          
-          <textarea
-            className={`w-full bg-transparent text-sm p-3 resize-none min-h-[80px] outline-none custom-scrollbar ${(!workspace || workspace.type !== 'local') ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="Ask anything or tell me what you want to build or change..."
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (task.trim() && !isPlanning && !isApplying) {
-                  handlePlan(false);
-                }
-              }
-            }}
-            disabled={!workspace || workspace.type !== 'local'}
-          />
-          
-          <div className="flex items-center justify-between p-2 border-t border-[var(--border-0)]/40 bg-[var(--bg-1)]/30 rounded-b-xl">
-            <div className="flex items-center gap-2">
-              <PlusMenu onFileSelect={(files) => {
-                Array.from(files).forEach((file) => {
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const content = reader.result as string;
-                    if (file.type.startsWith('image/')) {
-                      setTask((prev) => `${prev}\n![${file.name}](${content})`.trim());
-                    } else {
-                      setTask((prev) => `${prev}\n\`\`\`${file.name}\n${content.slice(0, 10000)}\n\`\`\``.trim());
-                    }
-                  };
-                  if (file.type.startsWith('image/')) {
-                    reader.readAsDataURL(file);
-                  } else {
-                    reader.readAsText(file);
-                  }
-                });
-              }} />
-              
-              <ModelSelector />
-            </div>
-            
-            <div className="flex items-center gap-1">
-              {(!workspace || workspace.type !== 'local') ? (
-                <div className="text-xs text-[var(--warning)] flex items-center gap-1 px-2 py-1 bg-[#f59e0b1a] rounded">
-                  <AlertTriangle size={13} /> Open local folder
-                </div>
-              ) : (
-                <button
-                  onClick={() => handlePlan(false)}
-                  disabled={isPlanning || isApplying || (!task.trim() && !pendingQuestion)}
-                  className="px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-h)] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
-                >
-                  {isPlanning || isApplying ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                  {isPlanning || isApplying ? 'Working...' : 'Run Task'}
-                </button>
-              )}
-            </div>
+      <div className="flex-shrink-0 mt-2 pt-2 border-t border-[var(--border-0)]">
+        {(!workspace || workspace.type !== 'local') && (
+          <div className="mb-2 text-xs text-[var(--warning)] flex items-center gap-1 px-2.5 py-1 bg-[#f59e0b1a] border border-[#f59e0b33] rounded-lg">
+            <AlertTriangle size={13} /> Open a local folder to enable AI Cowork task execution
           </div>
-        </div>
+        )}
+
+        <AIChatInputBar
+          value={task}
+          onChange={setTask}
+          onSend={() => handlePlan(false)}
+          isStreamingOrRunning={isPlanning || isApplying}
+          onCancel={() => {}}
+          onFileSelect={(files) => {
+            Array.from(files).forEach((file) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const content = reader.result as string;
+                if (file.type.startsWith('image/')) {
+                  setTask((prev) => `${prev}\n![${file.name}](${content})`.trim());
+                } else {
+                  setTask((prev) => `${prev}\n\`\`\`${file.name}\n${content.slice(0, 10000)}\n\`\`\``.trim());
+                }
+              };
+              if (file.type.startsWith('image/')) {
+                reader.readAsDataURL(file);
+              } else {
+                reader.readAsText(file);
+              }
+            });
+          }}
+          disabled={!workspace || workspace.type !== 'local'}
+          placeholder="Ask anything or tell me what you want to build or change..."
+        />
 
         {applyError && (
           <div className="mt-2 p-2.5 text-xs text-[var(--error)] bg-[#dc26261a] border border-[#dc262633] rounded-lg flex items-start gap-2">
