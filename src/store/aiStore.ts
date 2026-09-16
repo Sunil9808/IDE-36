@@ -16,6 +16,7 @@ interface AIStore {
   availableProfiles: BehaviorProfile[];
   activeSessionId: string | null;
   sessions: Session[];
+  activeMode: 'chat' | 'work';
   
   addMessage: (message: ChatMessage) => void;
   updateLastMessage: (content: string) => void;
@@ -31,6 +32,7 @@ interface AIStore {
 
   setSelectedModel: (modelId: string) => void;
   setSelectedProfile: (profileId: string) => void;
+  setActiveMode: (mode: 'chat' | 'work') => void;
   fetchModels: () => Promise<void>;
   createSession: () => void;
   deleteSession: (id: string) => void;
@@ -77,6 +79,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
   availableProfiles: defaultProfiles,
   activeSessionId: null,
   sessions: [],
+  activeMode: 'chat',
 
   addMessage: (message) => {
     set((state) => ({ messages: [...state.messages, message] }));
@@ -145,6 +148,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   setSelectedModel: (modelId) => set({ selectedModel: modelId }),
   setSelectedProfile: (profileId) => set({ selectedProfile: profileId }),
+  setActiveMode: (mode) => set({ activeMode: mode }),
   
   fetchModels: async () => {
     try {

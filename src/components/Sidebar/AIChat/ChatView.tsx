@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Send, Square, RotateCcw, Trash2, ChevronDown, Sparkles } from "lucide-react";
 import { useAIChat } from "../../../hooks/useAIChat";
 import { useAIStore } from "../../../store/aiStore";
@@ -78,9 +78,7 @@ export const ChatView: React.FC = () => {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto custom-scrollbar px-3 py-2"
       >
-        {!hasMessages ? (
-          <WelcomeScreen />
-        ) : (
+        {hasMessages && (
           <>
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
@@ -123,7 +121,7 @@ export const ChatView: React.FC = () => {
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything about your code... (Shift+Enter for newline)"
+            placeholder="Ask anything, @ to mention, / for commands"
             rows={1}
             disabled={isStreaming}
             className="flex-1 bg-transparent text-[13px] text-[var(--text-0)] placeholder-[var(--text-3)] resize-none outline-none min-h-[20px] max-h-[160px] py-0.5 custom-scrollbar disabled:opacity-60"

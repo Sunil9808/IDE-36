@@ -1,27 +1,26 @@
 import React, { useState } from 'react';
-import { Menu, MessageSquare, Bot } from 'lucide-react';
+import { Menu, MessageSquare, Briefcase } from 'lucide-react';
 import { ProfileSelector } from './ProfileSelector';
 import { SessionList } from './SessionList';
 import { AgentPanel } from './AgentPanel';
 import { ChatView } from './ChatView';
 import { ModelSelector } from './ModelSelector';
+import { useAIStore } from '../../../store/aiStore';
 
 interface AIChatPanelProps {
   title?: string;
   onClose?: () => void;
 }
 
-type PanelMode = 'chat' | 'agent';
-
 export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatPanelProps) {
   const [showSessions, setShowSessions] = useState(false);
-  const [mode, setMode] = useState<PanelMode>('chat');
+  const { activeMode, setActiveMode } = useAIStore();
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg-1)] text-[var(--text-0)] relative overflow-hidden">
       {/* Header */}
       <div className="flex-shrink-0 flex flex-col p-3 border-b border-[var(--border-0)] glass-panel z-10">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {/* Session history button */}
             <button
@@ -35,9 +34,9 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
             {/* Mode tabs */}
             <div className="flex bg-[var(--bg-2)] rounded-lg p-0.5 border border-[var(--border-0)]">
               <button
-                onClick={() => setMode('chat')}
+                onClick={() => setActiveMode('chat')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all ${
-                  mode === 'chat'
+                  activeMode === 'chat'
                     ? 'bg-[var(--accent)] text-white shadow-sm'
                     : 'text-[var(--text-2)] hover:text-[var(--text-0)]'
                 }`}
@@ -46,32 +45,27 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
                 Chat
               </button>
               <button
-                onClick={() => setMode('agent')}
+                onClick={() => setActiveMode('work')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all ${
-                  mode === 'agent'
+                  activeMode === 'work'
                     ? 'bg-[var(--accent)] text-white shadow-sm'
                     : 'text-[var(--text-2)] hover:text-[var(--text-0)]'
                 }`}
               >
-                <Bot size={13} />
-                Agent
+                <Briefcase size={13} />
+                Work
               </button>
             </div>
-          </div>
-
-          {/* Model selector — right aligned */}
-          <div className="flex-shrink-0 ml-2">
-            <ModelSelector />
           </div>
         </div>
 
         {/* Profile selector — only shown in Chat mode */}
-        {mode === 'chat' && <ProfileSelector />}
+        {activeMode === 'chat' && <ProfileSelector />}
       </div>
 
       {/* Panel body */}
       <div className="flex-1 overflow-hidden min-h-0">
-        {mode === 'chat' ? <ChatView /> : <AgentPanel />}
+        {activeMode === 'chat' ? <ChatView /> : <AgentPanel />}
       </div>
 
       {/* Session history overlay */}
@@ -92,3 +86,4 @@ export default function AIChatPanel({ title = 'AI Assistant', onClose }: AIChatP
     </div>
   );
 }
+

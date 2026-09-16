@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Play, FileCode, CheckCircle, CircleDashed, Loader2, AlertTriangle, Check, Paperclip, Plus, Image, AtSign, Zap, Globe, MessageCircle, Edit2, Bug, Bot, ChevronUp } from 'lucide-react';
+import { Play, FileCode, CheckCircle, CircleDashed, Loader2, AlertTriangle, Check, Paperclip, Plus, Image, AtSign, Zap, Globe, MessageCircle, Edit2, Bug, Bot, ChevronUp, BookOpen, Sparkles } from 'lucide-react';
 
 import { useEditorStore } from '../../../store/editorStore';
 import { useWorkspaceStore } from '../../../store/workspaceStore';
@@ -12,6 +12,7 @@ import { getLanguageFromExtension } from '../../../utils/fileHelpers';
 import { DiffEditor } from '@monaco-editor/react';
 import { aiService } from '../../../services/aiService';
 import { ModelSelector } from './ModelSelector';
+import { WelcomeScreen } from './WelcomeScreen';
 
 interface Action {
   type: string;
@@ -379,15 +380,31 @@ export function AgentPanel({}: AgentPanelProps) {
     }
   };
 
+  const handleActionSelect = (actionId: string) => {
+    switch (actionId) {
+      case 'explain':
+        setTask('Explain the code in the current active file in detail.');
+        break;
+      case 'debug':
+        setTask('Find and fix bugs in the current file.');
+        break;
+      case 'generate':
+        setTask('Generate new code based on project requirements.');
+        break;
+      case 'refactor':
+        setTask('Refactor the current file for better readability and performance.');
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden p-4">
       <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col pt-2 pb-4">
         
         {!plan && !isPlanning && !submittedTask && historyList.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-[var(--text-1)] text-center px-4">
-            <CircleDashed size={32} className="mb-3 opacity-20" />
-            <p className="text-sm">The Agent can write files, run commands, and install packages autonomously.</p>
-          </div>
+          <WelcomeScreen onActionSelect={handleActionSelect} />
         )}
 
         {historyList.map((hist, idx) => (

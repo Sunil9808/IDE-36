@@ -52,32 +52,40 @@ export class OpenAIAdapter implements ModelAdapter {
   }
 
   async getModels(): Promise<ModelInfo[]> {
-    const defaultModel = process.env.OPENAI_MODEL;
-    if (defaultModel) {
-      return [
-        { id: defaultModel, name: defaultModel.split('/').pop() + ' (Default)', provider: this.id }
-      ];
-    }
+    const defaultModel = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+    
+    // Default list of working models for OpenAI / NVIDIA NIM endpoint
+    const knownModels: ModelInfo[] = [
+      { id: defaultModel, name: defaultModel.split('/').pop() + ' (Default)', provider: this.id },
+      { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Llama 3.2 11B Vision', provider: this.id },
+      { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', name: 'Nemotron 3.5 Lightning 30B', provider: this.id },
+      { id: 'moonshotai/kimi-k3', name: 'Kimi K3', provider: this.id },
+    ];
 
     try {
       const client = this.getClient();
       const response = await client.models.list();
-      return response.data.map(m => ({ id: m.id, name: m.id, provider: this.id }));
+      if (response.data && response.data.length > 0) {
+        const fetched = response.data.slice(0, 30).map(m => ({ id: m.id, name: m.id, provider: this.id }));
+        // Ensure default model is first
+        return [
+          { id: defaultModel, name: defaultModel.split('/').pop() + ' (Default)', provider: this.id },
+          ...fetched.filter(m => m.id !== defaultModel)
+        ];
+      }
     } catch (e) {
-      return [
-        { id: 'gpt-4o', name: 'GPT-4o', provider: this.id },
-        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: this.id },
-        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: this.id }
-      ];
+      // Fallback
     }
+
+    return knownModels;
   }
 
   async streamChat(options: ChatRequestOptions, res: Response): Promise<void> {
-    let { prompt, context, conversationHistory = [], model = 'gpt-4o', profile } = options;
+    let { prompt, context, conversationHistory = [], model, profile } = options;
     
-    // Always use the configured model from environment to prevent 404s from unsupported models
-    if (process.env.OPENAI_MODEL) {
-      model = process.env.OPENAI_MODEL;
+    // Use requested model, or fallback to environment OPENAI_MODEL, or default to working model
+    if (!model || model === 'Select Model') {
+      model = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
     }
 
     const systemPrompt = buildSystemPrompt(context, conversationHistory);
@@ -138,11 +146,10 @@ export class OpenAIAdapter implements ModelAdapter {
   }
 
   async getChatCompletion(options: ChatRequestOptions): Promise<string> {
-    let { prompt, context, conversationHistory = [], model = 'gpt-4o', profile } = options;
+    let { prompt, context, conversationHistory = [], model, profile } = options;
 
-    // Always use the configured model from environment to prevent 404s from unsupported models
-    if (process.env.OPENAI_MODEL) {
-      model = process.env.OPENAI_MODEL;
+    if (!model || model === 'Select Model') {
+      model = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
     }
 
     const systemPrompt = buildSystemPrompt(context, conversationHistory);
