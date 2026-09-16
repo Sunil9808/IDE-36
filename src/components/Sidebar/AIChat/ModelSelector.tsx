@@ -196,10 +196,7 @@ export const ModelSelector: React.FC = () => {
         className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] rounded-lg border border-[var(--border-0)] transition-colors shadow-sm"
         title="Switch AI Model"
       >
-        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${getProviderBadgeStyle(selected.provider)}`}>
-          {selected.providerLabel}
-        </span>
-        <span className="font-semibold truncate max-w-[110px] text-[var(--text-0)]">
+        <span className="font-semibold truncate max-w-[120px] text-[var(--text-0)]">
           {selected.name}
         </span>
         <ChevronDown size={13} className="text-[var(--text-2)]" />
