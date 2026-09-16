@@ -92,7 +92,7 @@ export const useUIStore = create<UIStore>((set) => ({
   activeBottomPanel: 'terminal',
   
   rightPanelVisible: true,
-  rightPanelWidth: 360,
+  rightPanelWidth: 380,
 
   statusBarVisible: true,
   centeredLayout: false,

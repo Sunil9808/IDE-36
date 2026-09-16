@@ -63,9 +63,10 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
         className="w-full bg-transparent text-sm p-3.5 resize-none min-h-[70px] max-h-[160px] outline-none custom-scrollbar disabled:opacity-60 text-[var(--text-0)] placeholder-[var(--text-3)]/60 rounded-t-2xl"
       />
 
-      <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-1)]/30 rounded-b-2xl">
+      {/* Control Bar - Responsive flex wrapper */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-2 bg-[var(--bg-1)]/30 rounded-b-2xl">
         {/* Left Side: Plus Menu + Mode Switcher [ Chat | Cowork ] */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <PlusMenu onFileSelect={onFileSelect} />
 
           {/* Mode Pill Toggle */}
@@ -73,32 +74,32 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
             <button
               type="button"
               onClick={() => setActiveMode('chat')}
-              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
                 activeMode === 'chat'
                   ? 'bg-[var(--accent)] text-white shadow-sm'
                   : 'text-[var(--text-2)] hover:text-[var(--text-0)]'
               }`}
             >
-              <MessageSquare size={12} />
-              Chat
+              <MessageSquare size={11} />
+              <span>Chat</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveMode('work')}
-              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
                 activeMode === 'work'
                   ? 'bg-[var(--accent)] text-white shadow-sm'
                   : 'text-[var(--text-2)] hover:text-[var(--text-0)]'
               }`}
             >
-              <Briefcase size={12} />
-              Cowork
+              <Briefcase size={11} />
+              <span>Cowork</span>
             </button>
           </div>
         </div>
 
         {/* Right Side: ModelSelector + Mic + AudioLines + Clear + Send/Run/Stop */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0 ml-auto">
           <ModelSelector />
 
           {/* Mic Button */}
@@ -110,7 +111,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
             }`}
             title={isRecording ? "Stop recording" : "Voice input"}
           >
-            <Mic size={15} />
+            <Mic size={14} />
           </button>
 
           {/* Audio Waveform Button */}
@@ -122,7 +123,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
             }`}
             title="Audio visualizer mode"
           >
-            <AudioLines size={15} />
+            <AudioLines size={14} />
           </button>
 
           {/* Clear messages button */}
@@ -133,7 +134,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
               title="Clear conversation"
               className="p-1.5 text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--bg-2)] rounded-lg transition-colors"
             >
-              <Trash2 size={15} />
+              <Trash2 size={14} />
             </button>
           )}
 
@@ -145,7 +146,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
               title="Stop execution"
               className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
             >
-              <Square size={15} />
+              <Square size={14} />
             </button>
           ) : (
             <button
@@ -155,7 +156,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
               title={activeMode === 'work' ? "Run Task (Enter)" : "Send message (Enter)"}
               className="p-1.5 bg-[var(--accent)] hover:opacity-90 text-white rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {activeMode === 'work' ? <Play size={15} /> : <Send size={15} />}
+              {activeMode === 'work' ? <Play size={14} /> : <Send size={14} />}
             </button>
           )}
         </div>
