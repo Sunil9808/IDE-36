@@ -63,10 +63,10 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
         className="w-full bg-transparent text-sm p-3.5 resize-none min-h-[70px] max-h-[160px] outline-none custom-scrollbar disabled:opacity-60 text-[var(--text-0)] placeholder-[var(--text-3)]/60 rounded-t-2xl"
       />
 
-      {/* Control Bar — Single line layout (no flex-wrap) matching image 2 */}
-      <div className="flex items-center justify-between gap-1.5 px-3 py-2 bg-[var(--bg-1)]/30 rounded-b-2xl overflow-x-auto custom-scrollbar-none">
+      {/* Control Bar — Tight fit single line layout with bright Mic & Audio buttons */}
+      <div className="flex items-center justify-between gap-1 px-2.5 py-1.5 bg-[var(--bg-1)]/40 rounded-b-2xl min-w-0">
         {/* Left Side: Plus Menu + Mode Switcher [ Chat | Cowork ] */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <PlusMenu onFileSelect={onFileSelect} />
 
           {/* Mode Pill Toggle */}
@@ -74,7 +74,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
             <button
               type="button"
               onClick={() => setActiveMode('chat')}
-              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
                 activeMode === 'chat'
                   ? 'bg-[var(--accent)] text-white shadow-sm'
                   : 'text-[var(--text-2)] hover:text-[var(--text-0)]'
@@ -86,7 +86,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
             <button
               type="button"
               onClick={() => setActiveMode('work')}
-              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
                 activeMode === 'work'
                   ? 'bg-[var(--accent)] text-white shadow-sm'
                   : 'text-[var(--text-2)] hover:text-[var(--text-0)]'
@@ -98,32 +98,36 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
           </div>
         </div>
 
-        {/* Right Side: ModelSelector + Mic + AudioLines + Clear + Send/Run/Stop */}
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Right Side: ModelSelector + Bright Mic + Bright AudioLines + Clear + Send/Run */}
+        <div className="flex items-center gap-1 shrink-0 ml-auto">
           <ModelSelector />
 
-          {/* Mic Button */}
+          {/* Mic Button - Bright & Highlighted */}
           <button
             type="button"
             onClick={() => setIsRecording(!isRecording)}
-            className={`p-1.5 rounded-lg text-[var(--text-2)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] transition-colors ${
-              isRecording ? 'text-red-400 bg-red-500/10' : ''
+            className={`p-1.5 rounded-lg transition-all ${
+              isRecording
+                ? 'text-red-400 bg-red-500/20 shadow-sm'
+                : 'text-gray-200 hover:text-white hover:bg-[var(--hover)]'
             }`}
             title={isRecording ? "Stop recording" : "Voice input"}
           >
-            <Mic size={14} />
+            <Mic size={14} className={isRecording ? 'text-red-400' : 'text-gray-300 hover:text-white'} />
           </button>
 
-          {/* Audio Waveform Button */}
+          {/* Audio Waveform / Live Button - Bright & Highlighted */}
           <button
             type="button"
             onClick={() => setIsAudioActive(!isAudioActive)}
-            className={`p-1.5 rounded-lg text-[var(--text-2)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] transition-colors ${
-              isAudioActive ? 'text-[var(--accent)] bg-[var(--accent)]/10' : ''
+            className={`p-1.5 rounded-lg transition-all ${
+              isAudioActive
+                ? 'text-[var(--accent)] bg-[var(--accent)]/20 shadow-sm'
+                : 'text-gray-200 hover:text-white hover:bg-[var(--hover)]'
             }`}
-            title="Audio visualizer mode"
+            title="Live audio visualizer mode"
           >
-            <AudioLines size={14} />
+            <AudioLines size={14} className={isAudioActive ? 'text-[var(--accent)]' : 'text-gray-300 hover:text-white'} />
           </button>
 
           {/* Clear messages button */}
@@ -132,7 +136,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
               type="button"
               onClick={onClearMessages}
               title="Clear conversation"
-              className="p-1.5 text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--bg-2)] rounded-lg transition-colors"
+              className="p-1.5 text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--hover)] rounded-lg transition-colors"
             >
               <Trash2 size={14} />
             </button>
@@ -144,7 +148,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
               type="button"
               onClick={onCancel}
               title="Stop execution"
-              className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+              className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors shrink-0"
             >
               <Square size={14} />
             </button>
@@ -154,7 +158,7 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
               onClick={onSend}
               disabled={!value.trim() || disabled}
               title={activeMode === 'work' ? "Run Task (Enter)" : "Send message (Enter)"}
-              className="p-1.5 bg-[var(--accent)] hover:opacity-90 text-white rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1.5 bg-[var(--accent)] hover:opacity-90 text-white rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               {activeMode === 'work' ? <Play size={14} /> : <Send size={14} />}
             </button>
