@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { Response } from 'express';
 import { ModelAdapter, ChatRequestOptions, ModelInfo } from './types';
-import { buildSystemPrompt } from '../aiService'; // We will export this from aiService or move it
+import { buildSystemPrompt } from '../aiService';
 
 function parseMultimodalContent(text: string) {
   const regex = /!\[.*?\]\((data:image\/[^;]+;base64,[^\)]+)\)/g;
@@ -28,6 +28,32 @@ function parseMultimodalContent(text: string) {
     return text;
   }
   return contentArray;
+}
+
+function resolveModelName(requestedModel?: string): string {
+  const isNvidia = (process.env.OPENAI_BASE_URL || '').includes('nvidia.com');
+  const defaultModel = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+
+  if (!requestedModel || requestedModel === 'Select Model') {
+    return defaultModel;
+  }
+
+  if (isNvidia) {
+    if (requestedModel === 'gpt-4o-mini' || requestedModel === 'gemini-1-5-flash' || requestedModel === 'claude-3-5-haiku') {
+      return 'meta/llama-3.2-11b-vision-instruct';
+    }
+    if (requestedModel === 'gpt-4o' || requestedModel === 'claude-3-5-sonnet' || requestedModel === 'o1-preview' || requestedModel === 'deepseek-r1') {
+      return 'nvidia/nemotron-3.5-lightning-30b-a3b';
+    }
+    if (requestedModel === 'qwen-2-5-coder' || requestedModel === 'llama-3-3' || requestedModel === 'deepseek-r1-local') {
+      return 'meta/llama-3.2-11b-vision-instruct';
+    }
+    if (!requestedModel.includes('/')) {
+      return defaultModel;
+    }
+  }
+
+  return requestedModel;
 }
 
 export class OpenAIAdapter implements ModelAdapter {
@@ -67,7 +93,6 @@ export class OpenAIAdapter implements ModelAdapter {
       const response = await client.models.list();
       if (response.data && response.data.length > 0) {
         const fetched = response.data.slice(0, 30).map(m => ({ id: m.id, name: m.id, provider: this.id }));
-        // Ensure default model is first
         return [
           { id: defaultModel, name: defaultModel.split('/').pop() + ' (Default)', provider: this.id },
           ...fetched.filter(m => m.id !== defaultModel)
@@ -83,10 +108,7 @@ export class OpenAIAdapter implements ModelAdapter {
   async streamChat(options: ChatRequestOptions, res: Response): Promise<void> {
     let { prompt, context, conversationHistory = [], model, profile } = options;
     
-    // Use requested model, or fallback to environment OPENAI_MODEL, or default to working model
-    if (!model || model === 'Select Model') {
-      model = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
-    }
+    let targetModel = resolveModelName(model);
 
     const systemPrompt = buildSystemPrompt(context, conversationHistory);
     const client = this.getClient();
@@ -95,16 +117,16 @@ export class OpenAIAdapter implements ModelAdapter {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    // Build messages with conversation history for multi-turn context
     const historyMessages = (conversationHistory || []).slice(-10).map(entry => ({
       role: (entry.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: typeof entry.content === 'string' ? entry.content.slice(0, 2000) : String(entry.content)
     }));
 
     const startTime = Date.now();
-    try {
-      const stream = await client.chat.completions.create({
-        model,
+
+    const makeStreamCall = async (modelToUse: string) => {
+      return await client.chat.completions.create({
+        model: modelToUse,
         messages: [
           { role: 'system' as const, content: systemPrompt },
           ...historyMessages,
@@ -115,6 +137,22 @@ export class OpenAIAdapter implements ModelAdapter {
         stream: true,
         stream_options: { include_usage: true }
       });
+    };
+
+    try {
+      let stream;
+      try {
+        stream = await makeStreamCall(targetModel);
+      } catch (e: any) {
+        const fallbackModel = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+        if (targetModel !== fallbackModel) {
+          console.warn(`[OpenAIAdapter] Model "${targetModel}" failed (${e.message}). Falling back to "${fallbackModel}"`);
+          targetModel = fallbackModel;
+          stream = await makeStreamCall(fallbackModel);
+        } else {
+          throw e;
+        }
+      }
 
       let usage = null;
       for await (const chunk of stream) {
@@ -134,11 +172,12 @@ export class OpenAIAdapter implements ModelAdapter {
         done: true,
         usage: usage ? { prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens } : undefined,
         latencyMs,
-        model
+        model: targetModel
       })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
     } catch (error: any) {
+      console.error('[OpenAIAdapter] Error:', error);
       res.write(`data: ${JSON.stringify({ error: error.message || 'OpenAI request failed' })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
@@ -148,30 +187,44 @@ export class OpenAIAdapter implements ModelAdapter {
   async getChatCompletion(options: ChatRequestOptions): Promise<string> {
     let { prompt, context, conversationHistory = [], model, profile } = options;
 
-    if (!model || model === 'Select Model') {
-      model = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
-    }
-
+    let targetModel = resolveModelName(model);
     const systemPrompt = buildSystemPrompt(context, conversationHistory);
     const client = this.getClient();
 
-    // Build messages with conversation history
     const historyMessages = (conversationHistory || []).slice(-10).map(entry => ({
       role: (entry.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: typeof entry.content === 'string' ? entry.content.slice(0, 2000) : String(entry.content)
     }));
 
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system' as const, content: systemPrompt },
-        ...historyMessages,
-        { role: 'user' as const, content: prompt },
-      ],
-      max_tokens: profile?.maxTokens || 2000,
-      temperature: profile?.temperature ?? 0.7,
-    });
+    try {
+      const completion = await client.chat.completions.create({
+        model: targetModel,
+        messages: [
+          { role: 'system' as const, content: systemPrompt },
+          ...historyMessages,
+          { role: 'user' as const, content: prompt },
+        ],
+        max_tokens: profile?.maxTokens || 2000,
+        temperature: profile?.temperature ?? 0.7,
+      });
 
-    return completion.choices[0]?.message?.content || '';
+      return completion.choices[0]?.message?.content || '';
+    } catch (error: any) {
+      const fallbackModel = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+      if (targetModel !== fallbackModel) {
+        const completion = await client.chat.completions.create({
+          model: fallbackModel,
+          messages: [
+            { role: 'system' as const, content: systemPrompt },
+            ...historyMessages,
+            { role: 'user' as const, content: prompt },
+          ],
+          max_tokens: profile?.maxTokens || 2000,
+          temperature: profile?.temperature ?? 0.7,
+        });
+        return completion.choices[0]?.message?.content || '';
+      }
+      throw error;
+    }
   }
 }
