@@ -154,8 +154,8 @@ export const ModelSelector: React.FC = () => {
   const modelsList: RichModelOption[] = DEFAULT_MODELS;
 
   // Selected model info fallback
-  const currentSelectedId = selectedModel || 'claude-3-5-sonnet';
-  const selected = modelsList.find(m => m.id === currentSelectedId) || modelsList[3];
+  const currentSelectedId = selectedModel || 'gpt-4o-mini';
+  const selected = modelsList.find(m => m.id === currentSelectedId) || modelsList[0];
 
   // Filter models
   const filteredModels = modelsList.filter(m => 

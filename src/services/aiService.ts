@@ -18,7 +18,7 @@ export const aiService = {
       const response = await fetch(`${BASE_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, context }),
+        body: JSON.stringify({ prompt, context, model: store.selectedModel }),
       });
 
       if (!response.ok) {

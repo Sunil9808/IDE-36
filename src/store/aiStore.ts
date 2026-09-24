@@ -77,7 +77,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
   settings: defaultSettings,
   error: null,
 
-  selectedModel: 'claude-3-5-sonnet',
+  selectedModel: 'gpt-4o-mini',
   selectedProfile: 'concise',
   availableModels: [],
   availableProfiles: defaultProfiles,
