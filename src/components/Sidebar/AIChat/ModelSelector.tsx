@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAIStore } from '../../../store/aiStore';
-import { ChevronDown, Check, Search, Settings, Sparkles, Zap, Brain, Wrench, Server } from 'lucide-react';
+import { ChevronDown, Check, Search, Settings, Zap, Brain, Wrench } from 'lucide-react';
 
 export interface RichModelOption {
   id: string;
@@ -133,7 +133,7 @@ export const DEFAULT_MODELS: RichModelOption[] = [
 ];
 
 export const ModelSelector: React.FC = () => {
-  const { selectedModel, setSelectedModel, availableModels } = useAIStore();
+  const { selectedModel, setSelectedModel } = useAIStore();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
@@ -150,7 +150,6 @@ export const ModelSelector: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Merge dynamic available models if provided, otherwise default list
   const modelsList: RichModelOption[] = DEFAULT_MODELS;
 
   // Selected model info fallback
@@ -202,12 +201,12 @@ export const ModelSelector: React.FC = () => {
         <ChevronDown size={12} className="text-[var(--text-2)] shrink-0" />
       </button>
 
-      {/* Selector Popover */}
+      {/* Selector Popover — Aligned right-[-85px] to prevent clipping off the left sidebar edge */}
       {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-80 bg-[var(--bg-1)] border border-[var(--border-0)] rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute bottom-full right-[-85px] sm:right-0 mb-2 w-[275px] max-w-[calc(100vw-32px)] bg-[var(--bg-1)] border border-[var(--border-0)] rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
           
           {/* Header & Search */}
-          <div className="p-2.5 border-b border-[var(--border-0)] bg-[var(--bg-0)]/60">
+          <div className="p-2 border-b border-[var(--border-0)] bg-[var(--bg-0)]/60">
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-2)] border border-[var(--border-0)] rounded-lg focus-within:border-[var(--accent)] transition-all">
               <Search size={14} className="text-[var(--text-3)] shrink-0" />
               <input
@@ -222,14 +221,14 @@ export const ModelSelector: React.FC = () => {
           </div>
 
           {/* Model Groups */}
-          <div className="max-h-[320px] overflow-y-auto custom-scrollbar p-1.5 space-y-3">
+          <div className="max-h-[320px] overflow-y-auto custom-scrollbar p-1.5 space-y-2.5">
             {categories.map((cat) => {
               const categoryModels = filteredModels.filter(m => m.category === cat.id);
               if (categoryModels.length === 0) return null;
 
               return (
                 <div key={cat.id} className="space-y-1">
-                  <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-3)]">
+                  <div className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-3)]">
                     {cat.label}
                   </div>
 
@@ -243,14 +242,14 @@ export const ModelSelector: React.FC = () => {
                           setSelectedModel(model.id);
                           setIsOpen(false);
                         }}
-                        className={`flex flex-col p-2.5 rounded-lg text-left transition-all w-full border ${
+                        className={`flex flex-col p-2 rounded-lg text-left transition-all w-full border ${
                           isSelected
                             ? 'bg-[var(--accent)]/10 border-[var(--accent)]/40 text-[var(--text-0)] shadow-sm'
                             : 'bg-[var(--bg-0)]/40 hover:bg-[var(--bg-2)] border-transparent text-[var(--text-1)]'
                         }`}
                       >
                         {/* Top row: Name + Provider Badge + Checkmark */}
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center justify-between gap-1.5 mb-1">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="font-semibold text-xs text-[var(--text-0)] truncate">
                               {model.name}
@@ -264,7 +263,7 @@ export const ModelSelector: React.FC = () => {
 
                         {/* Description */}
                         {model.description && (
-                          <p className="text-[11px] text-[var(--text-2)] mb-2 line-clamp-1">
+                          <p className="text-[10px] text-[var(--text-2)] mb-1.5 line-clamp-1">
                             {model.description}
                           </p>
                         )}
