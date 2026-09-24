@@ -193,10 +193,10 @@ export const ModelSelector: React.FC = () => {
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 px-1.5 py-1 text-xs font-medium text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] rounded-lg border border-[var(--border-0)] transition-colors shadow-sm shrink"
+        className="flex items-center gap-1 px-1.5 py-1 text-xs font-medium text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] rounded-lg border border-[var(--border-0)] transition-colors shadow-sm min-w-0 max-w-[110px]"
         title="Switch AI Model"
       >
-        <span className="font-semibold truncate max-w-[75px] sm:max-w-[110px] text-[var(--text-0)]">
+        <span className="font-semibold truncate text-[var(--text-0)]">
           {selected.name}
         </span>
         <ChevronDown size={12} className="text-[var(--text-2)] shrink-0" />
