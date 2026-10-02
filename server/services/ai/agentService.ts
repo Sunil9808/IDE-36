@@ -285,7 +285,12 @@ async function listWorkspaceFiles(effectiveRoot: string, dir = effectiveRoot, de
   if (depth > 3) return [];
 
   const ignore = new Set(['.git', 'node_modules', 'dist', 'dist-check', 'coverage', '.next', '.turbo']);
-  const entries = await fs.readdir(dir, { withFileTypes: true });
+  let entries: import('fs').Dirent[] = [];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
   const files: string[] = [];
 
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -977,7 +982,7 @@ COMPLETENESS RULES (MANDATORY):
 9. Match the existing project's coding style, framework, and architecture.
 10. Include responsive design and proper styling.
 11. CRITICAL JSON FORMATTING: You MUST escape all newlines as \\n and quotes as \\" inside the "content" string. Do not use raw newlines inside JSON strings.
-12. DOMAIN KNOWLEDGE: If asked for the "Find-S algorithm", ALWAYS write the Machine Learning Find-S algorithm for finding the most specific hypothesis from positive training examples. Do NOT write a linear search or string matching algorithm.
+12. DOMAIN KNOWLEDGE: If asked for the "Find-S algorithm", ALWAYS implement Tom Mitchell's Machine Learning concept learning algorithm: initialize hypothesis to the most specific hypothesis (e.g. all '0' or [0, 0, ...]) and for each positive training example, generalize mismatched attributes to '?', ignoring negative examples. Do NOT write a linear search or decision tree.
 13. INTENT INFERENCE: Like a highly intelligent senior engineer, actively deduce the user's true intent even if their prompt is poorly worded, has typos, uses wrong terminology, or is grammatically incorrect. Do NOT take poorly phrased questions purely literally if doing so makes no sense. Instead, figure out what they *actually meant* to build, and provide the correct, industry-standard solution for their underlying intent.
 14. LANGUAGE AUTO-DETECTION: If the user asks for a Machine Learning, Data Science, or heavy mathematical algorithm without specifying a language, automatically default to Python. For Web/UI tasks, default to React/TypeScript unless otherwise specified.
 
@@ -1370,7 +1375,39 @@ export async function runStreamingPairProgrammerAgent(
       continue;
     }
     
-    // Fallback if backend needs to run it (omitted for brevity, handled similarly to runPairProgrammerAgent)
+    // Execute on backend virtual workspace:
+    try {
+      if (action.type === 'mkdir') {
+        const target = resolveAgentActionPath((action as any).path, effectiveRoot);
+        await fsCreateDirectory(target);
+        result.actions.push({ type: action.type, target: (action as any).path, success: true, output: 'Directory created' });
+      } else if (action.type === 'writeFile') {
+        const a = action as { path: string; content: string };
+        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        await fsWriteFile(target, a.content || '');
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File written' });
+      } else if (action.type === 'createFile') {
+        const a = action as { path: string };
+        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        await fsCreateFile(target);
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File created' });
+      } else if (action.type === 'deleteFile') {
+        const a = action as { path: string };
+        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        await fsDeleteFile(target);
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File deleted' });
+      } else if (action.type === 'appendFile') {
+        const a = action as { path: string; content: string };
+        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.appendFile(target, a.content || '', 'utf-8');
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File appended' });
+      } else {
+        result.actions.push({ ...action, success: true, output: 'Action processed' } as any);
+      }
+    } catch (err: any) {
+      result.actions.push({ type: action.type, target: (action as any).path || '', success: false, output: err.message });
+    }
   }
 
   res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: 'execute', target: 'workspace', status: 'success' })}\n\n`);
@@ -1410,7 +1447,7 @@ export async function runPairProgrammerAgent(
     if (shouldUseNewProjectScaffold(task)) {
       parsed = createGenericProjectScaffold(task);
     } else {
-      rawText = await getChatCompletion(await buildAgentPrompt(task, context, effectiveRoot, nluResult, conversationHistory), context, 4000);
+      rawText = await getChatCompletion(await buildAgentPrompt(task, context, effectiveRoot, nluResult, conversationHistory), context, 16384);
       parsed = extractJson(rawText);
     }
   } catch (err) {
@@ -1422,7 +1459,7 @@ CRITICAL: You MUST escape ALL newlines as \\n and ALL double-quotes as \\" insid
 Task: ${task}
 
 Return ONLY valid JSON matching this schema: {summary:string, plan:string[], actions: [{type:string, path?:string, content?:string, command?:string}], remainingFiles:string[], nextSteps:string[]}. Every writeFile action MUST contain COMPLETE file contents. Do not include any extra text outside the JSON.`;
-      const retryText = await getChatCompletion(retryPrompt, context, 4000);
+      const retryText = await getChatCompletion(retryPrompt, context, 16384);
       parsed = extractJson(retryText);
     } catch (err2) {
       throw err;
@@ -1433,7 +1470,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
   if (!Array.isArray(parsed.actions) || parsed.actions.length === 0) {
     try {
       const convertPrompt = `Convert the following partial result into the full JSON schema. Partial: ${JSON.stringify(parsed)}\nReturn ONLY JSON with concrete actions (mkdir/writeFile/appendFile/runCommand/installDependency/detectLanguages/installExtension) based on the plan. Every writeFile action MUST contain COMPLETE production-ready code. No TODOs, no placeholders.`;
-      const convertText = await getChatCompletion(convertPrompt, context, 4000);
+      const convertText = await getChatCompletion(convertPrompt, context, 16384);
       const converted = extractJson(convertText);
       if (Array.isArray(converted.actions) && converted.actions.length > 0) parsed = converted;
     } catch (err3) {
@@ -1461,7 +1498,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
       const continuePrompt = buildContinuationPrompt(task, fullPlan, alreadyCreated, remainingFiles);
 
       try {
-        const passResult = extractJson(await getChatCompletion(continuePrompt, context, 4000));
+        const passResult = extractJson(await getChatCompletion(continuePrompt, context, 16384));
         const newActions = Array.isArray(passResult.actions) ? passResult.actions : [];
         allActions.push(...newActions);
 
@@ -1480,7 +1517,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
   if (completenessWarnings.length > 0) {
     try {
       const fixPrompt = `The following files contain placeholder/stub code that must be replaced with real implementations:\n${completenessWarnings.join('\n')}\n\nRegenerate ONLY those files with COMPLETE, PRODUCTION-READY code. No TODOs, no placeholders, no stubs.\n\nReturn JSON: { "actions": [{ "type": "writeFile", "path": "...", "content": "COMPLETE code" }] }`;
-      const fixResult = extractJson(await getChatCompletion(fixPrompt, context, 4000));
+      const fixResult = extractJson(await getChatCompletion(fixPrompt, context, 16384));
       if (Array.isArray(fixResult.actions)) {
         // Replace the stub files with fixed versions
         for (const fixAction of fixResult.actions) {

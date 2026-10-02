@@ -143,6 +143,16 @@ export const aiService = {
           if (dataStr === '[DONE]') continue;
           try {
             const event = JSON.parse(dataStr);
+            
+            const text = event.choices?.[0]?.delta?.content;
+            if (text) {
+              onEvent({ type: 'text_delta', content: text });
+            }
+            
+            if (event.done === true || event.type === 'chat_complete') {
+              onEvent({ type: 'chat_complete' });
+            }
+            
             onEvent(event);
           } catch (e) {
             // Ignored JSON parse errors for partial chunks if any

@@ -25,3 +25,5 @@ Thumbs.db
 
 # Temporary
 server/storage/temp/
+.blackboxrules
+.blackbox/

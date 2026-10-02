@@ -148,6 +148,17 @@ export const aiController = {
         return;
       }
 
+      if (nluResult?.intent === 'explain' || nluResult?.intent === 'question') {
+        const { profile } = req.body as { profile?: { temperature?: number; maxTokens?: number } };
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        await streamChatResponse(task, context, res, conversationHistory, { profile });
+        res.write('data: {"type":"chat_complete"}\n\n');
+        res.end();
+        return;
+      }
+
       if (nluResult.isDestructive) {
         res.write("data: " + JSON.stringify({ type: 'confirmation_required', message: `⚠️ This will ${nluResult.intent} files. Please confirm.`, plan: nluResult.executionPlan, nluResult }) + "\n\n");
         res.end();

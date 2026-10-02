@@ -5,20 +5,32 @@ import fs from 'fs';
 const ROOT_FILE = path.resolve(process.cwd(), '.workspace-root.txt');
 
 export function getWorkspaceRoot(): string {
+  let root = '';
   if (process.env.WORKSPACE_ROOT) {
-    return path.resolve(process.env.WORKSPACE_ROOT);
-  }
-  
-  if (fs.existsSync(ROOT_FILE)) {
+    root = path.resolve(process.env.WORKSPACE_ROOT);
+  } else if (fs.existsSync(ROOT_FILE)) {
     const savedPath = fs.readFileSync(ROOT_FILE, 'utf-8').trim();
     if (savedPath && fs.existsSync(savedPath)) {
-      return path.resolve(savedPath);
+      root = path.resolve(savedPath);
     }
   }
 
-  // Fallback to home directory to prevent using the IDE's source folder
-  const homeDir = process.env.USERPROFILE || process.env.HOME || process.cwd();
-  return path.resolve(homeDir);
+  if (!root) {
+    const homeDir = process.env.USERPROFILE || process.env.HOME || process.cwd();
+    root = path.resolve(homeDir);
+  }
+
+  // Ensure workspace directory exists on disk to prevent ENOENT crashes
+  try {
+    if (!fs.existsSync(root)) {
+      fs.mkdirSync(root, { recursive: true });
+    }
+  } catch (err) {
+    console.warn(`Could not create workspace root at ${root}, using cwd`, err);
+    root = process.cwd();
+  }
+
+  return root;
 }
 
 export function setWorkspaceRoot(newPath: string): void {

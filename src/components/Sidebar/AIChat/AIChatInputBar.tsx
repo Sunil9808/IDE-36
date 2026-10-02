@@ -3,6 +3,9 @@ import { Send, Square, Play, Mic, AudioLines, Trash2, MessageSquare, Briefcase }
 import { PlusMenu } from './PlusMenu';
 import { ModelSelector } from './ModelSelector';
 import { useAIStore } from '../../../store/aiStore';
+import { SlashCommandMenu } from './SlashCommandMenu';
+import { MentionPopup } from './MentionPopup';
+import { slashCommands, mentionTargets } from '../../../utils/chatCommands';
 
 interface AIChatInputBarProps {
   value: string;
@@ -34,14 +37,95 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [isAudioActive, setIsAudioActive] = useState(false);
 
+  // Popup states
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [showMentionPopup, setShowMentionPopup] = useState(false);
+  const [menuFilter, setMenuFilter] = useState('');
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [selectedMenuIndex, setSelectedMenuIndex] = useState(0);
+  const [mentionTriggerPos, setMentionTriggerPos] = useState<number | null>(null);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(e.target.value);
+    const newValue = e.target.value;
+    onChange(newValue);
+    
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+
+    const cursor = el.selectionStart;
+
+    // Detect Slash Command
+    if (newValue.startsWith('/')) {
+      const match = newValue.match(/^\/(\w*)$/);
+      if (match) {
+        setShowSlashMenu(true);
+        setMenuFilter('/' + match[1]);
+        setShowMentionPopup(false);
+      } else {
+        setShowSlashMenu(false);
+      }
+    } else {
+      setShowSlashMenu(false);
+    }
+
+    // Detect Mention
+    if (!newValue.startsWith('/')) {
+      const textBeforeCursor = newValue.slice(0, cursor);
+      const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+      if (mentionMatch) {
+        setShowMentionPopup(true);
+        setMentionFilter('@' + mentionMatch[1]);
+        setMentionTriggerPos(cursor - mentionMatch[0].length);
+      } else {
+        setShowMentionPopup(false);
+      }
+    }
+
+    // Reset selection index
+    setSelectedMenuIndex(0);
   };
 
+  const getFilteredCommands = () => slashCommands.filter(c => c.label.toLowerCase().includes(menuFilter.toLowerCase()));
+  const getFilteredMentions = () => mentionTargets.filter(m => m.label.toLowerCase().includes(mentionFilter.toLowerCase()));
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const isPopupVisible = showSlashMenu || showMentionPopup;
+
+    if (isPopupVisible) {
+      const maxIndex = showSlashMenu 
+        ? getFilteredCommands().length - 1 
+        : getFilteredMentions().length - 1;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMenuIndex(prev => Math.min(prev + 1, maxIndex));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMenuIndex(prev => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        setShowMentionPopup(false);
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (showSlashMenu) {
+          const selected = getFilteredCommands()[selectedMenuIndex];
+          if (selected) handleSlashCommandSelect(selected.id);
+        } else if (showMentionPopup) {
+          const selected = getFilteredMentions()[selectedMenuIndex];
+          if (selected) handleMentionSelect(selected.id);
+        }
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (value.trim() && !isStreamingOrRunning && !disabled) {
@@ -50,8 +134,70 @@ export const AIChatInputBar: React.FC<AIChatInputBarProps> = ({
     }
   };
 
+  const handleSlashCommandSelect = (cmdId: string) => {
+    if (cmdId === 'clear') {
+      if (onClearMessages) onClearMessages();
+      onChange('');
+    } else {
+      let prompt = '';
+      switch (cmdId) {
+        case 'explain': prompt = 'Explain the current file'; break;
+        case 'debug': prompt = 'Find and fix bugs'; break;
+        case 'generate': prompt = 'Generate new code'; break;
+        case 'refactor': prompt = 'Refactor for better quality'; break;
+        case 'review': prompt = 'Code review'; break;
+        case 'test': prompt = 'Generate tests'; break;
+        case 'docs': prompt = 'Generate documentation'; break;
+        default: prompt = ''; break;
+      }
+      onChange(prompt);
+      // Let the change propagate then send
+      setTimeout(() => {
+        if (!isStreamingOrRunning && !disabled) {
+          onSend();
+        }
+      }, 0);
+    }
+    setShowSlashMenu(false);
+  };
+
+  const handleMentionSelect = (mentionId: string) => {
+    const mention = mentionTargets.find(m => m.id === mentionId);
+    if (mention && mentionTriggerPos !== null) {
+      const before = value.slice(0, mentionTriggerPos);
+      const cursor = textareaRef.current?.selectionStart || value.length;
+      const after = value.slice(cursor);
+      
+      const newValue = before + mention.label + ' ' + after;
+      onChange(newValue);
+      
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const newCursor = mentionTriggerPos + mention.label.length + 1;
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(newCursor, newCursor);
+        }
+      }, 0);
+    }
+    setShowMentionPopup(false);
+  };
+
   return (
     <div className="relative flex flex-col bg-[var(--bg-0)] border border-[var(--border-1)] rounded-2xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-md w-full">
+      <SlashCommandMenu 
+        visible={showSlashMenu} 
+        filter={menuFilter} 
+        selectedIndex={selectedMenuIndex} 
+        onSelect={handleSlashCommandSelect} 
+      />
+      
+      <MentionPopup 
+        visible={showMentionPopup} 
+        filter={mentionFilter} 
+        selectedIndex={selectedMenuIndex} 
+        onSelect={handleMentionSelect} 
+      />
+
       <textarea
         ref={textareaRef}
         value={value}

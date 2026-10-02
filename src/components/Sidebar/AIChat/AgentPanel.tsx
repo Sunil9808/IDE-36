@@ -105,6 +105,7 @@ export function AgentPanel({}: AgentPanelProps) {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [runningTasks, setRunningTasks] = useState<{id: string, command: string}[]>([]);
   const [clarificationMessage, setClarificationMessage] = useState<string | null>(null);
+  const [chatResponse, setChatResponse] = useState<string>('');
 
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -210,6 +211,7 @@ export function AgentPanel({}: AgentPanelProps) {
 
       setEvents([]);
       setClarificationMessage(null);
+      setChatResponse('');
       let finalData = null;
 
       await aiService.runAgentTask(fullTask, context, conversationHistory, (event: any) => {
@@ -218,6 +220,12 @@ export function AgentPanel({}: AgentPanelProps) {
           setPlan(event.result);
         } else if (event.type === 'clarification' || event.type === 'confirmation_required') {
           setClarificationMessage(event.message || 'Could you provide more details?');
+        } else if (event.type === 'text_delta') {
+          setChatResponse(prev => prev + event.content);
+        } else if (event.type === 'error') {
+          setApplyError(event.error || 'Agent encountered an error');
+          setEvents(prev => prev.map(e => e.type === 'tool_start' ? { ...e, type: 'tool_error', error: event.error || 'Failed' } : e));
+          setIsPlanning(false);
         } else {
           setEvents(prev => {
             // Update existing tool event or add new
@@ -255,6 +263,7 @@ export function AgentPanel({}: AgentPanelProps) {
       setApplyError(errorMsg);
     } finally {
       setIsPlanning(false);
+      setEvents(prev => prev.map(e => e.type === 'tool_start' ? { ...e, type: 'tool_complete' } : e));
     }
   };
 
@@ -503,6 +512,16 @@ export function AgentPanel({}: AgentPanelProps) {
           </div>
         )}
 
+        {chatResponse && !isPlanning && (
+          <div className="flex justify-start mb-6">
+            <div className="bg-[var(--bg-1)] border border-[var(--border-0)] px-4 py-3 rounded-2xl rounded-tl-sm max-w-[95%] w-full shadow-sm">
+              <p className="text-sm text-[var(--text-0)] whitespace-pre-wrap leading-relaxed">
+                {chatResponse}
+              </p>
+            </div>
+          </div>
+        )}
+
         {plan && !isPlanning && (
 
           <div className="flex justify-start mb-6">
@@ -698,7 +717,7 @@ export function AgentPanel({}: AgentPanelProps) {
       <div className="flex-shrink-0 mt-2 pt-2 border-t border-[var(--border-0)]">
         {(!workspace || workspace.type !== 'local') && (
           <div className="mb-2 text-xs text-[var(--warning)] flex items-center gap-1 px-2.5 py-1 bg-[#f59e0b1a] border border-[#f59e0b33] rounded-lg">
-            <AlertTriangle size={13} /> Open a local folder to enable AI Cowork task execution
+            <AlertTriangle size={13} /> No local folder open — file changes will be applied to the virtual workspace
           </div>
         )}
 
@@ -726,7 +745,6 @@ export function AgentPanel({}: AgentPanelProps) {
               }
             });
           }}
-          disabled={!workspace || workspace.type !== 'local'}
           placeholder="Ask anything or tell me what you want to build or change..."
         />
 

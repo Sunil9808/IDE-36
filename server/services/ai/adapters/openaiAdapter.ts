@@ -31,26 +31,21 @@ function parseMultimodalContent(text: string) {
 }
 
 function resolveModelName(requestedModel?: string): string {
-  const isNvidia = (process.env.OPENAI_BASE_URL || '').includes('nvidia.com');
   const defaultModel = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
 
   if (!requestedModel || requestedModel === 'Select Model') {
     return defaultModel;
   }
 
+  // If the model ID contains '/', it's likely a valid NIM/provider-namespaced model — pass it through
+  if (requestedModel.includes('/')) {
+    return requestedModel;
+  }
+
+  // For non-namespaced IDs that don't exist on NIM, fallback to the configured default
+  const isNvidia = (process.env.OPENAI_BASE_URL || '').includes('nvidia.com');
   if (isNvidia) {
-    if (requestedModel === 'gpt-4o-mini' || requestedModel === 'gemini-1-5-flash' || requestedModel === 'claude-3-5-haiku') {
-      return 'meta/llama-3.2-11b-vision-instruct';
-    }
-    if (requestedModel === 'gpt-4o' || requestedModel === 'claude-3-5-sonnet' || requestedModel === 'o1-preview' || requestedModel === 'deepseek-r1') {
-      return 'nvidia/nemotron-3.5-lightning-30b-a3b';
-    }
-    if (requestedModel === 'qwen-2-5-coder' || requestedModel === 'llama-3-3' || requestedModel === 'deepseek-r1-local') {
-      return 'meta/llama-3.2-11b-vision-instruct';
-    }
-    if (!requestedModel.includes('/')) {
-      return defaultModel;
-    }
+    return defaultModel;
   }
 
   return requestedModel;
@@ -78,12 +73,11 @@ export class OpenAIAdapter implements ModelAdapter {
   }
 
   async getModels(): Promise<ModelInfo[]> {
-    const defaultModel = process.env.OPENAI_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+    const defaultModel = process.env.OPENAI_MODEL || 'deepseek-ai/deepseek-v4.1-flash';
     
     // Default list of working models for OpenAI / NVIDIA NIM endpoint
     const knownModels: ModelInfo[] = [
       { id: defaultModel, name: defaultModel.split('/').pop() + ' (Default)', provider: this.id },
-      { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Llama 3.2 11B Vision', provider: this.id },
       { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', name: 'Nemotron 3.5 Lightning 30B', provider: this.id },
       { id: 'moonshotai/kimi-k3', name: 'Kimi K3', provider: this.id },
     ];

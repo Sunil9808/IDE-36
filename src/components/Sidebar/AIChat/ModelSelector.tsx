@@ -133,10 +133,15 @@ export const DEFAULT_MODELS: RichModelOption[] = [
 ];
 
 export const ModelSelector: React.FC = () => {
-  const { selectedModel, setSelectedModel } = useAIStore();
+  const { selectedModel, setSelectedModel, availableModels, fetchModels } = useAIStore();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Fetch models from the backend API on mount
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
 
   // Close when clicking outside
   useEffect(() => {
@@ -150,7 +155,22 @@ export const ModelSelector: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  const modelsList: RichModelOption[] = DEFAULT_MODELS;
+  // Merge DEFAULT_MODELS with dynamically fetched API models
+  const apiModels: RichModelOption[] = availableModels
+    .filter((am: any) => !DEFAULT_MODELS.some(dm => dm.id === am.id))
+    .map((am: any) => ({
+      id: am.id,
+      name: am.name || am.id.split('/').pop() || am.id,
+      provider: (am.provider || 'openai') as RichModelOption['provider'],
+      providerLabel: am.provider === 'gemini' ? 'Google' : am.provider === 'ollama' ? 'Ollama' : 'NVIDIA NIM',
+      category: 'cloud' as any,
+      categoryLabel: am.provider === 'gemini' ? 'Google Gemini' : am.provider === 'ollama' ? 'Local / Ollama' : 'Cloud / NVIDIA NIM',
+      contextWindow: '–',
+      badges: [] as RichModelOption['badges'],
+      description: `${am.provider} model via API`,
+    }));
+
+  const modelsList: RichModelOption[] = [...DEFAULT_MODELS, ...apiModels];
 
   // Selected model info fallback
   const currentSelectedId = selectedModel || 'gpt-4o-mini';
@@ -160,13 +180,15 @@ export const ModelSelector: React.FC = () => {
   const filteredModels = modelsList.filter(m => 
     m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     m.providerLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.categoryLabel.toLowerCase().includes(searchQuery.toLowerCase())
+    m.categoryLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const categories: Array<{ id: 'recommended' | 'powerful' | 'local'; label: string }> = [
+  const categories: Array<{ id: string; label: string }> = [
     { id: 'recommended', label: 'Recommended / Fast' },
     { id: 'powerful', label: 'Powerful / Reasoning' },
     { id: 'local', label: 'Local / Ollama' },
+    ...(apiModels.length > 0 ? [{ id: 'cloud', label: 'Cloud / NVIDIA NIM' }] : []),
   ];
 
   const getProviderBadgeStyle = (provider: string) => {
