@@ -883,71 +883,35 @@ The final project must be both: FUNCTIONALLY CORRECT + STRUCTURALLY CORRECT
 30. BEFORE FINISHING: Inspect the structure. Ensure no duplicates, correct directories, and clean imports.
 31. FINAL RULE: Optimize for: "The code runs, the files are correctly placed, responsibilities are clear, the structure follows the project architecture, and another developer can understand the project."
 
-# ZERO-STOP GENERATION RULES
+# PRECISE VERB-BASED INTENT MAP & EXECUTION RULES
 
-When the user asks you to build a feature (e.g., a login page), you must NEVER stop after generating only the folder structure. You must complete the entire implementation in one go.
-Follow these exact steps:
-1. First create the required project folder structure.
-2. Then automatically create every file inside its correct folder.
-3. Write the complete working code inside each file. Do not leave any file empty.
-4. Do not only show or describe the code — actually create and save the files using \`writeFile\`.
-5. Connect everything correctly (e.g., HTML linking to CSS/JS).
-6. Ensure all file paths and imports are correct.
+Do exactly what the user's verb says, nothing more.
 
-DO NOT STOP after creating the folder structure. Folder creation is only the first step. Continue automatically by creating and writing the complete code into every required file until the feature is fully implemented and ready to run.
-Only consider the task complete when both the folder structure AND all files with complete working code have been created.
+INTENT MAP:
+1. "create" a folder / folder structure → create the folder(s) only (using \`mkdir\` actions). Do NOT create files or add code.
+2. "create" a file → create an EMPTY file only (using \`createFile\` or \`writeFile\` with empty content ""). NEVER add code.
+3. "write" a program with no file named → show the code in the summary/chat response. Do NOT touch the filesystem.
+4. "write" a program in a named file → write the full code into that file (using \`writeFile\`).
+5. "put it in", "save it in", "add it to" a file → write the most recent code block from this conversation into that file, copied exactly. Create the file if it does not exist.
+6. "create a folder, a file in it, and write a program" (or explicitly "build full app / full project with code") → create folder and files containing the full code.
+7. If a request combines actions, do ONLY the actions the user named. NEVER add extra files, tests, READMEs, or config unless explicitly requested.
 
-# FOLLOW-UP COMMANDS & MISSING FILES
+FILE EXTENSIONS:
+- If the user gives no extension, add it from the language: Python .py, HTML .html, CSS .css, JavaScript .js, TypeScript .ts, Java .java, C .c, C++ .cpp, JSON .json.
+- If the user gives an extension, use it exactly.
+- "create html file" → one empty .html file. Nothing else.
 
-When a project is partially created or only the folder structure exists, understand that the following commands have the same implementation intent:
+@ MENTIONS:
+- @name is a file or folder in the workspace. Use its exact path, including nested paths like @src/utils/math.py.
+- "put it in @file" → write into that exact path.
+- If @name does not exist and the user said create or write, create it. Otherwise reply "❌ <path> not found" and stop.
 
-- Add files       modify this also as an example
-- Create files
-- Build files
-- Generate files
-- Write files
-- Implement files
-- Complete files
-- Finish the project
-- Continue building
-- Add missing files
-- Generate missing files
-- Complete the folder structure
-- Populate the files
-- Write code into files
-- Implement the remaining project
-- Finish implementation
-- Build the remaining parts
-
-When I use any of these commands, do not only explain what should be done and do not create another folder structure.
-
-Instead:
-
-1. Inspect the currently opened project and existing folder structure.
-2. Detect which files already exist.
-3. Detect which required files are missing.
-4. Create all missing files in their correct locations.
-5. Write complete working code into every newly created file.
-6. If an existing file is empty or incomplete, complete its implementation.
-7. Do not overwrite working code unnecessarily.
-8. Maintain correct connections between HTML, CSS, JavaScript, backend, APIs, imports, and other dependencies.
-9. Continue automatically until the requested feature or project is fully implemented.
-10. Never consider the task complete just because folders exist.
-
-Important:
-Commands such as "add files", "build files", "generate files", "write to files", or similar commands should trigger actual file creation and code implementation.
-
-
-Before finishing, verify:
-- Required folders exist
-- Required files exist
-- Missing files have been created
-- Files contain actual implementation
-- No required file is empty
-- File paths and imports are correct
-- The feature is ready to run
-
-A project with only folders is NOT complete. Continue from the current project state and implement the missing files until the requested task is finished.
+EXECUTION RULES:
+1. "the code you gave", "that program", "the above code" = the most recent code block in this conversation. If none exists, write it first, then save it.
+2. A file MUST contain the code before the task counts as done ONLY when the user asked for code in it. NEVER leave a file empty when the user asked for code in it. Conversely, when the user asked ONLY to create files or folders, respect that and do NOT add unsolicited code.
+3. Touch each path at most once per user message. NEVER re-create a file that already exists.
+4. Skip long plans for simple requests. Execute directly.
+5. Do not run terminal commands unless asked. Ask before deleting, overwriting a non-empty file, or installing anything.
 
 ### Example
 
@@ -1154,20 +1118,12 @@ Select tools automatically.
 ## 10. Do Not Perform Unnecessary Operations
 Choose the smallest correct execution path. For simple questions, just answer. Do not inspect the project or run commands.
 
-# Complete File Generation and Implementation Rule
-
-When asked to **build, create, generate, implement, develop, make, or add a project or feature**, you must not stop after creating folders and empty files.
-Creating a folder structure is only the first part of implementation.
-
-## Mandatory Build Workflow
-Understand Request -> Inspect Current Workspace -> Plan Required Structure -> Create Directories -> Create Files -> **WRITE ACTUAL CODE INTO FILES** -> Connect All Files -> Validate -> Run or Preview -> Report Completion
-
-A task is **NOT complete** when folders and files are created. A task is complete only when required directories exist, files exist, **code is written inside the files**, files are correctly connected, imports are correct, and the requested functionality is implemented.
-
-**Folder creation is not project completion.**
-**File creation is not code generation.**
-
-For every project or feature request, you must continue working after creating the folder structure and files. You must WRITE the code into the files using 'writeFile'. Never stop at just creating the files.
+## 11. Action Compliance Rule
+Always strictly obey the user's specific verb:
+- If the user asked to "create a folder" or "create a folder structure", only generate \`mkdir\` actions. Do NOT create files or write code.
+- If the user asked to "create a file", create an empty file only. Do NOT add unsolicited code.
+- If the user asked to "write code/program", only then write the code.
+- Never add extra unsolicited files, configs, or tests unless requested.
 
 ## Final Rule
 **What does the user want, what context is needed, and what is the smallest correct action required to complete it?**
@@ -1363,50 +1319,50 @@ export async function runStreamingPairProgrammerAgent(
   res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'execute', target: 'workspace', message: 'Applying changes...' })}\n\n`);
 
   for (const action of allActions) {
-    if (action.type === 'writeFile' || action.type === 'mkdir' || action.type === 'deleteFile') {
-      const targetPath = (action as any).path;
-      if (processedFiles.has(targetPath)) {
-        res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: action.type, target: targetPath, status: 'success' })}\n\n`);
+    const actionPath = (action as any).path || (action as any).target || '';
+    if (!actionPath && action.type !== 'detectLanguages') continue;
+
+    if (action.type === 'writeFile' || action.type === 'mkdir' || action.type === 'deleteFile' || action.type === 'createFile') {
+      if (processedFiles.has(actionPath)) {
+        res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: action.type, target: actionPath, status: 'success' })}\n\n`);
       }
     }
-    // We append the raw action. If it's local, frontend applies it!
+
     if (isLocalWorkspace) {
-      result.actions.push({ ...action, success: true, output: 'Local workspace: handled by frontend' } as any);
+      result.actions.push({ ...action, target: actionPath, success: true, output: 'Local workspace: handled by frontend' } as any);
       continue;
     }
-    
+
     // Execute on backend virtual workspace:
     try {
       if (action.type === 'mkdir') {
-        const target = resolveAgentActionPath((action as any).path, effectiveRoot);
+        const target = resolveAgentActionPath(actionPath, effectiveRoot);
         await fsCreateDirectory(target);
-        result.actions.push({ type: action.type, target: (action as any).path, success: true, output: 'Directory created' });
+        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'Directory created' });
       } else if (action.type === 'writeFile') {
-        const a = action as { path: string; content: string };
-        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        const a = action as { content?: string };
+        const target = resolveAgentActionPath(actionPath, effectiveRoot);
         await fsWriteFile(target, a.content || '');
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File written' });
+        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File written' });
       } else if (action.type === 'createFile') {
-        const a = action as { path: string };
-        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        const target = resolveAgentActionPath(actionPath, effectiveRoot);
         await fsCreateFile(target);
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File created' });
+        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File created' });
       } else if (action.type === 'deleteFile') {
-        const a = action as { path: string };
-        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        const target = resolveAgentActionPath(actionPath, effectiveRoot);
         await fsDeleteFile(target);
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File deleted' });
+        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File deleted' });
       } else if (action.type === 'appendFile') {
-        const a = action as { path: string; content: string };
-        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        const a = action as { content?: string };
+        const target = resolveAgentActionPath(actionPath, effectiveRoot);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.appendFile(target, a.content || '', 'utf-8');
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File appended' });
+        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File appended' });
       } else {
-        result.actions.push({ ...action, success: true, output: 'Action processed' } as any);
+        result.actions.push({ ...action, target: actionPath, success: true, output: 'Action processed' } as any);
       }
     } catch (err: any) {
-      result.actions.push({ type: action.type, target: (action as any).path || '', success: false, output: err.message });
+      result.actions.push({ type: action.type, target: actionPath, success: false, output: err.message });
     }
   }
 
@@ -1544,15 +1500,15 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
     detectedLanguages: [],
   };
 
-  const isLocalWorkspace = context.workspaceType === 'local';
+  // const isLocalWorkspace = context.workspaceType === 'local';
 
   for (const action of allActions) {
     try {
       if (action.type === 'listFiles') {
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: (action as { path?: string }).path || '.', success: true, output: 'Local workspace: will be handled by frontend if needed' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: (action as { path?: string }).path || '.', success: true, output: 'Local workspace: will be handled by frontend if needed' });
+        //   continue;
+        // }
         const target = resolveAgentActionPath((action as { path?: string }).path || '.', effectiveRoot);
         const entries = await fs.readdir(target, { withFileTypes: true });
         const output = entries
@@ -1561,10 +1517,10 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         result.actions.push({ type: action.type, target: (action as { path?: string }).path || '.', success: true, output });
 
       } else if (action.type === 'readFile') {
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: (action as { path: string }).path, success: true, output: 'Local workspace: will be read by frontend if needed' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: (action as { path: string }).path, success: true, output: 'Local workspace: will be read by frontend if needed' });
+        //   continue;
+        // }
         const a = action as { path: string };
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         const content = await fs.readFile(target, 'utf-8');
@@ -1572,30 +1528,30 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
 
       } else if (action.type === 'mkdir') {
         const a = action as { path: string };
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+        //   continue;
+        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fsCreateDirectory(target);
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'Directory created' });
 
       } else if (action.type === 'writeFile') {
         const a = action as { path: string; content: string };
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+        //   // continue;
+        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fsWriteFile(target, a.content || '');
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File written' });
 
       } else if (action.type === 'appendFile') {
         const a = action as { path: string; content: string };
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+          // continue;
+        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.appendFile(target, a.content || '', 'utf-8');
@@ -1603,20 +1559,20 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
 
       } else if (action.type === 'deleteFile') {
         const a = action as { path: string };
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
+          // continue;
+        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fsDeleteFile(target);
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File deleted' });
 
       } else if (action.type === 'renameFile') {
         const a = action as { oldPath: string; newPath: string };
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'Pending UI confirmation' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'Pending UI confirmation' });
+          // continue;
+        // }
         const oldTarget = resolveAgentActionPath(a.oldPath, effectiveRoot);
         const newTarget = resolveAgentActionPath(a.newPath, effectiveRoot);
         await renameWorkspaceFile(oldTarget, newTarget);
@@ -1626,20 +1582,20 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         const a = action as { packages: string[]; dev?: boolean };
         const packages = Array.isArray(a.packages) ? a.packages.filter(Boolean) : [];
         if (packages.length === 0) throw new Error('No packages were provided');
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: packages.join(', '), success: false, output: 'Cannot run npm commands directly on local folders from browser.' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: packages.join(', '), success: false, output: 'Cannot run npm commands directly on local folders from browser.' });
+          // continue;
+        // }
         const command = `npm install ${a.dev ? '-D ' : ''}${packages.join(' ')}`;
         const output = await runWorkspaceCommand(command, effectiveRoot);
         result.actions.push({ type: action.type, target: packages.join(', '), success: true, output });
 
       } else if (action.type === 'runCommand') {
         const a = action as { command: string; cwd?: string };
-        if (isLocalWorkspace) {
-          result.actions.push({ type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: false, output: 'Cannot run terminal commands directly on local folders from browser.' });
-          continue;
-        }
+        // if (isLocalWorkspace) {
+        result.actions.push({ type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: false, output: 'Cannot run terminal commands directly on local folders from browser.' });
+          // continue;
+        // }
         const commandRoot = a.cwd ? resolveAgentActionPath(a.cwd, effectiveRoot) : effectiveRoot;
         const output = await runWorkspaceCommand(a.command, commandRoot);
         result.actions.push({ type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: true, output });

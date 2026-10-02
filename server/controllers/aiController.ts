@@ -120,59 +120,143 @@ export const aiController = {
     }
   },
 
-  async agentStream(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { task, context = {}, conversationHistory = [] } = req.body as {
-        task: string;
-        context: AIContext;
-        conversationHistory: ConversationEntry[];
+  async agentStream(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { task, context = {}, conversationHistory = [] } = req.body as {
+      task: string;
+      context: AIContext;
+      conversationHistory: ConversationEntry[];
+    };
+
+    if (!task || typeof task !== 'string') {
+      res.status(400).json({
+        error: 'task is required and must be a string'
+      });
+      return;
+    }
+
+    // SSE HEADERS — ONLY HERE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const nluResult = processNLU(
+      task,
+      context,
+      conversationHistory
+    );
+
+    console.log('[Agent] Intent:', nluResult.intent);
+    console.log('[Agent] Task:', task);
+
+    if (nluResult.needsClarification) {
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'clarification',
+          message:
+            nluResult.clarificationMessage ||
+            'Could you provide more details?',
+          nluResult
+        })}\n\n`
+      );
+
+      if (!res.writableEnded) {
+        res.end();
+      }
+      return;
+    }
+
+    // Normal explanation/question
+    if (
+      nluResult.intent === 'explain' ||
+      nluResult.intent === 'question'
+    ) {
+      const { profile } = req.body as {
+        profile?: {
+          temperature?: number;
+          maxTokens?: number;
+        };
       };
 
-      if (!task || typeof task !== 'string') {
-        res.status(400).json({ error: 'task is required and must be a string' });
-        return;
-      }
+      await streamChatResponse(
+        task,
+        context,
+        res,
+        conversationHistory,
+        { profile }
+      );
 
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders();
+      if (!res.writableEnded) {
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'chat_complete'
+          })}\n\n`
+        );
 
-      // Run NLU pipeline (local, <5ms)
-      const nluResult = processNLU(task, context, conversationHistory);
-
-      // Clarification — return question without executing any actions
-      if (nluResult.needsClarification) {
-        res.write(`data: ${JSON.stringify({ type: 'clarification', message: nluResult.clarificationMessage || 'Could you provide more details?', nluResult })}\n\n`);
         res.end();
-        return;
       }
 
-      if (nluResult?.intent === 'explain' || nluResult?.intent === 'question') {
-        const { profile } = req.body as { profile?: { temperature?: number; maxTokens?: number } };
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        await streamChatResponse(task, context, res, conversationHistory, { profile });
-        res.write('data: {"type":"chat_complete"}\n\n');
+      return;
+    }
+
+    // Destructive action
+    if (nluResult.isDestructive) {
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'confirmation_required',
+          message: `⚠️ This will ${nluResult.intent} files. Please confirm.`,
+          plan: nluResult.executionPlan,
+          nluResult
+        })}\n\n`
+      );
+
+      if (!res.writableEnded) {
         res.end();
-        return;
       }
 
-      if (nluResult.isDestructive) {
-        res.write("data: " + JSON.stringify({ type: 'confirmation_required', message: `⚠️ This will ${nluResult.intent} files. Please confirm.`, plan: nluResult.executionPlan, nluResult }) + "\n\n");
-        res.end();
-        return;
-      }
+      return;
+    }
 
-      await runStreamingPairProgrammerAgent(task, context, conversationHistory, nluResult, res);
-      res.end();
-    } catch (error) {
-      console.error('Agent stream error:', error);
-      res.write(`data: ${JSON.stringify({ type: 'error', error: (error as any).message || 'Internal server error' })}\n\n`);
+    // BUILD / CREATE / MODIFY / FIX etc.
+    await runStreamingPairProgrammerAgent(
+      task,
+      context,
+      conversationHistory,
+      nluResult,
+      res
+    );
+
+    if (!res.writableEnded) {
       res.end();
     }
-  },
+
+  } catch (error) {
+    console.error('Agent stream error:', error);
+
+    const message =
+      (error as any)?.message || 'Internal server error';
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: message
+      });
+    } else if (!res.writableEnded) {
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'error',
+          error: message
+        })}\n\n`
+      );
+
+      res.end();
+    }
+  }
+},
 
   async explain(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

@@ -1,0 +1,1 @@
+def add(a, b):\n return a + b\n\ndef subtract(a, b):\n return a - b\n\ndef multiply(a, b):\n return a * b\n\ndef divide(a, b):\n if b == 0:\n raise ValueError(\"Cannot divide by zero\")\n return a / b
