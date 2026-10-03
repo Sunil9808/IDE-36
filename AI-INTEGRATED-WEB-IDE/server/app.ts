@@ -7,6 +7,7 @@ import aiRoutes from './routes/aiRoutes';
 import terminalRoutes from './routes/terminalRoutes';
 import projectRoutes from './routes/projectRoutes';
 import sessionRoutes from './routes/sessionRoutes';
+import gitRoutes from './routes/gitRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 
@@ -38,6 +39,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/terminal', terminalRoutes);
 app.use('/api/project', projectRoutes);
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/git', gitRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {

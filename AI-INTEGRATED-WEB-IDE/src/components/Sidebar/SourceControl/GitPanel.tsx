@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Check, ChevronDown, ChevronRight, GitBranch, Github, Minus, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { useSourceControlStore } from '../../../store/sourceControlStore';
@@ -23,11 +23,18 @@ export default function GitPanel() {
     stageFiles,
     unstageAll,
     commit,
+    refresh,
   } = useSourceControlStore();
   const [message, setMessage] = useState('');
   const [changesOpen, setChangesOpen] = useState(true);
   const [stagedOpen, setStagedOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    if (workspace) {
+      refresh();
+    }
+  }, [workspace, refresh]);
 
   const dirtyTabs = useMemo(() => tabs.filter((tab) => tab.isDirty), [tabs]);
   const dirtyPaths = dirtyTabs.map((tab) => tab.filePath);
@@ -91,7 +98,7 @@ export default function GitPanel() {
     notify(`Committed ${stagedTabs.length} file${stagedTabs.length === 1 ? '' : 's'}`, 'success');
   };
 
-  const refresh = () => {
+  const handleRefresh = () => {
     stageFiles(stagedFiles.filter((filePath) => dirtyPaths.includes(filePath)));
     notify('Source control refreshed', 'success');
   };
@@ -104,7 +111,7 @@ export default function GitPanel() {
         </span>
         {initialized && (
           <div className="flex items-center gap-1" style={{ color: 'var(--color-textMuted)' }}>
-            <IconButton title="Refresh" onClick={refresh}><RefreshCw size={17} /></IconButton>
+            <IconButton title="Refresh" onClick={handleRefresh}><RefreshCw size={17} /></IconButton>
             <IconButton title="Commit Staged Changes" onClick={handleCommit}><Check size={17} /></IconButton>
             <IconButton title="Stage All Changes" onClick={() => stageFiles(unstagedTabs.map((tab) => tab.filePath))}><Plus size={17} /></IconButton>
             <IconButton title="More Actions" onClick={() => setHistoryOpen((value) => !value)}><MoreHorizontal size={18} /></IconButton>
