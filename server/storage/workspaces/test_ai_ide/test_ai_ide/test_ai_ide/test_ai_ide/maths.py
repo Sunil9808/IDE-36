@@ -1,1 +1,0 @@
-import math_operations\n\ndef add(x, y):\n    return math_operations.add(x, y)\n\ndef subtract(x, y):\n    return math_operations.subtract(x, y)\n\ndef multiply(x, y):\n    return math_operations.multiply(x, y)\n\ndef divide(x, y):\n    return math_operations.divide(x, y)\n
