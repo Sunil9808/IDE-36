@@ -146,7 +146,7 @@ export default function SearchPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: 'var(--color-sidebar)' }}>
       <div className="flex h-9 items-center justify-between px-3 no-select">
-        <span className="text-[16px] font-normal uppercase leading-none" style={{ color: 'var(--color-text)' }}>
+        <span className="text-xs font-semibold uppercase leading-none" style={{ color: 'var(--color-text)' }}>
           Search
         </span>
         <div className="flex items-center gap-2" style={{ color: 'var(--color-textMuted)' }}>
@@ -176,12 +176,11 @@ export default function SearchPanel() {
             {replaceVisible ? <ChevronDown size={22} /> : <ChevronRight size={22} />}
           </button>
           <div
-            className="flex h-[38px] flex-1 items-center rounded-[5px] border"
-            style={{ background: '#111314', borderColor: invalidRegex ? '#f14c4c' : '#4b90a6' }}
+            className={`flex h-[38px] flex-1 items-center rounded-[5px] border ${invalidRegex ? 'border-[var(--error)]' : 'border-[var(--border-0)] focus-within:border-[var(--accent)]'} bg-[var(--bg-0)]`}
           >
             <input
               ref={searchInputRef}
-              className="min-w-0 flex-1 bg-transparent px-2 text-[20px] outline-none placeholder:text-[#6f6f6f]"
+              className="min-w-0 flex-1 bg-transparent px-2 text-[13px] outline-none placeholder:text-[var(--color-textFaint)]"
               style={{ color: 'var(--color-text)' }}
               placeholder="Search"
               value={query}
@@ -206,12 +205,11 @@ export default function SearchPanel() {
 
         {replaceVisible && <div className="mt-2 flex items-center gap-2 pl-8">
           <div
-            className="flex h-[35px] flex-1 items-center rounded-[5px] border"
-            style={{ background: '#151718', borderColor: '#34383b' }}
+            className="flex h-[35px] flex-1 items-center rounded-[5px] border border-[var(--border-0)] bg-[var(--bg-0)] focus-within:border-[var(--accent)]"
           >
             <input
               ref={replaceInputRef}
-              className="min-w-0 flex-1 bg-transparent px-2 text-[20px] outline-none placeholder:text-[#686868]"
+              className="min-w-0 flex-1 bg-transparent px-2 text-[13px] outline-none placeholder:text-[var(--color-textFaint)]"
               style={{ color: 'var(--color-text)' }}
               placeholder="Replace"
               value={replaceQuery}
@@ -241,7 +239,7 @@ export default function SearchPanel() {
         </div>
 
         {showMoreActions && (
-          <div className="mb-1 ml-8 rounded border p-2 text-[13px]" style={{ borderColor: '#34383b', color: 'var(--color-textMuted)' }}>
+          <div className="mb-1 ml-8 rounded border border-[var(--border-0)] p-2 text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
             Searching open editor tabs. Open a folder to search project files as they are opened.
           </div>
         )}
@@ -249,23 +247,23 @@ export default function SearchPanel() {
 
       <div className="flex-1 overflow-y-auto px-3 pt-3">
         {!workspace && !query && (
-          <div className="text-[20px] leading-[1.35]" style={{ color: '#aeb4b8' }}>
-            <p>You have not opened or specified a folder.</p>
-            <p>Only open files are currently searched -</p>
-            <button className="text-left text-[20px]" style={{ color: '#35b5ee' }} onClick={openFolder}>
+          <div className="text-[13px] leading-relaxed" style={{ color: 'var(--color-textMuted)' }}>
+            <p className="mb-2">You have not opened or specified a folder.</p>
+            <p className="mb-2">Only open files are currently searched.</p>
+            <button className="text-left font-medium hover:underline transition-all" style={{ color: 'var(--accent)' }} onClick={openFolder}>
               Open Folder
             </button>
           </div>
         )}
 
         {invalidRegex && (
-          <p className="mt-5 text-[16px]" style={{ color: '#f14c4c' }}>
+          <p className="mt-5 text-[13px]" style={{ color: '#f14c4c' }}>
             Invalid regular expression.
           </p>
         )}
 
         {query && !invalidRegex && matches.length === 0 && (
-          <p className="mt-5 text-[16px]" style={{ color: 'var(--color-textMuted)' }}>
+          <p className="mt-5 text-[13px]" style={{ color: 'var(--color-textMuted)' }}>
             No results found.
           </p>
         )}

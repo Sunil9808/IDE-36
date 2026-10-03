@@ -100,7 +100,6 @@ export function initTerminalSocket(socket: Socket): void {
         cols,
         rows,
         cwd: workDir,
-        useConpty: false,
         env: {
           ...process.env,
           TERM: 'xterm-256color',

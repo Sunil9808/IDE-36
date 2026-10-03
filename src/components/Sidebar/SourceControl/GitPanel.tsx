@@ -98,8 +98,8 @@ export default function GitPanel() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: 'var(--color-sidebar)' }}>
-      <div className="flex h-10 items-center justify-between px-[30px] no-select">
-        <span className="text-[16px] font-normal uppercase leading-none" style={{ color: 'var(--color-text)' }}>
+      <div className="flex h-9 items-center justify-between px-3 no-select">
+        <span className="text-xs font-semibold uppercase leading-none" style={{ color: 'var(--color-text)' }}>
           Source Control
         </span>
         {initialized && (
@@ -128,8 +128,7 @@ export default function GitPanel() {
         <div className="flex-1 overflow-y-auto px-3 pb-4">
           <div className="space-y-2">
             <textarea
-              className="h-[70px] w-full resize-none rounded px-2 py-2 text-[14px] outline-none"
-              style={{ background: 'var(--color-input)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              className="h-[60px] w-full resize-none rounded bg-[var(--bg-0)] border border-[var(--border-0)] px-2 py-2 text-[13px] text-[var(--text-0)] outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--text-2)]"
               placeholder={`Message (Ctrl+Enter to commit on '${branch}')`}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
@@ -140,8 +139,7 @@ export default function GitPanel() {
               }}
             />
             <button
-              className="h-[34px] w-full rounded-md text-[14px] font-medium transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: '#2f86ad', color: '#ffffff' }}
+              className="h-[28px] w-full rounded bg-[var(--accent)] text-[13px] font-medium text-white transition-colors hover:bg-[var(--accent-h)] disabled:cursor-not-allowed disabled:opacity-50"
               onClick={handleCommit}
               disabled={!message.trim() || stagedTabs.length === 0}
             >
@@ -200,8 +198,7 @@ export default function GitPanel() {
 
           {!published && (
             <button
-              className="mt-4 flex h-[38px] w-full items-center justify-center gap-2 rounded-md text-[16px] transition-colors hover:brightness-110"
-              style={{ background: '#2f86ad', color: '#ffffff' }}
+              className="mt-4 flex h-[28px] w-full items-center justify-center gap-2 rounded bg-[var(--accent)] text-[13px] font-medium text-white transition-colors hover:bg-[var(--accent-h)]"
               onClick={handlePublish}
             >
               <Github size={20} />
@@ -217,26 +214,22 @@ export default function GitPanel() {
 function NoFolderView({
   onOpenFolder,
   onCloneRepository,
-  onOpenDocs,
 }: {
   onOpenFolder: () => void;
   onCloneRepository: () => void;
   onOpenDocs: () => void;
 }) {
   return (
-    <div className="mx-px flex-1 overflow-y-auto border p-[24px]" style={{ borderColor: '#3794a6' }}>
-      <div className="text-[20px] leading-[1.35]" style={{ color: '#dce2e8' }}>
-        <p>
+    <div className="mx-px flex-1 overflow-y-auto px-4 py-4">
+      <div className="text-[13px] leading-relaxed text-[var(--color-textMuted)]">
+        <p className="mb-4">
           In order to use Git features, you can open a folder containing a Git repository or clone from a URL.
         </p>
 
-        <PanelButton onClick={onOpenFolder}>Open Folder</PanelButton>
-        <PanelButton onClick={onCloneRepository}>Clone Repository</PanelButton>
-
-        <p>
-          To learn more about how to use Git and source control in VS Code{' '}
-          <TextLink onClick={onOpenDocs}>read our docs</TextLink>.
-        </p>
+        <div className="flex flex-col gap-2">
+          <PanelButton onClick={onOpenFolder}>Open Folder</PanelButton>
+          <PanelButton onClick={onCloneRepository}>Clone Repository</PanelButton>
+        </div>
       </div>
     </div>
   );
@@ -244,7 +237,6 @@ function NoFolderView({
 
 function NoRepositoryView({
   onInitialize,
-  onOpenDocs,
   onPublish,
 }: {
   onInitialize: () => void;
@@ -252,27 +244,26 @@ function NoRepositoryView({
   onPublish: () => void;
 }) {
   return (
-    <div className="mx-px flex-1 overflow-y-auto border p-[30px]" style={{ borderColor: '#3794a6' }}>
-      <div className="text-[20px] leading-[1.35]" style={{ color: '#dce2e8' }}>
-        <p>
+    <div className="mx-px flex-1 overflow-y-auto px-4 py-4">
+      <div className="text-[13px] leading-relaxed text-[var(--color-textMuted)]">
+        <p className="mb-4">
           The folder currently open doesn't have a Git repository. You can initialize a repository which will enable source control features powered by Git.
         </p>
 
-        <PanelButton onClick={onInitialize}>Initialize Repository</PanelButton>
+        <div className="flex flex-col gap-2 mb-6">
+          <PanelButton onClick={onInitialize}>Initialize Repository</PanelButton>
+        </div>
 
-        <p>
-          To learn more about how to use Git and source control in VS Code{' '}
-          <TextLink onClick={onOpenDocs}>read our docs</TextLink>.
-        </p>
-
-        <p className="mt-6">
+        <p className="mb-4">
           You can directly publish this folder to a GitHub repository. Once published, you'll have access to source control features powered by Git and GitHub.
         </p>
 
-        <PanelButton onClick={onPublish}>
-          <Github size={24} fill="currentColor" />
-          Publish to GitHub
-        </PanelButton>
+        <div className="flex flex-col gap-2">
+          <PanelButton onClick={onPublish}>
+            <Github size={16} fill="currentColor" />
+            Publish to GitHub
+          </PanelButton>
+        </div>
       </div>
     </div>
   );
@@ -341,8 +332,7 @@ function EmptyLine({ children }: { children: React.ReactNode }) {
 function PanelButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <button
-      className="my-5 flex h-[38px] w-full items-center justify-center gap-2 rounded-md text-[18px] leading-none transition-colors hover:brightness-110"
-      style={{ background: '#2f86ad', color: '#ffffff' }}
+      className="flex h-[28px] w-full items-center justify-center gap-2 rounded bg-[var(--accent)] text-white text-[13px] font-medium transition-colors hover:bg-[var(--accent-h)]"
       onClick={onClick}
     >
       {children}

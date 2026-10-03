@@ -265,16 +265,28 @@ export default function Terminal() {
       }
       
       if (socketConnectedRef.current && socketSessionRef.current) {
-        // Detect Windows
-        const isWin = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('windows');
-        
-        // Wrap command to output exit code silently
         const marker = '__AI_EXIT_CODE_=';
-        let runCmd = '';
-        if (isWin) {
-           runCmd = `cmd.exe /c "${cwd ? `cd /d "${cwd.replace(/"/g, '\"')}" && ` : ''}${command}" ; echo ${marker}$?`;
+        let runCmd = command;
+        
+        if (cwd) {
+           const safeCwd = cwd.replace(/"/g, '\\"');
+           if (activeInstanceProfile === 'PowerShell') {
+             runCmd = `Set-Location -Path "${safeCwd}"; ${command}`;
+           } else if (activeInstanceProfile === 'Command Prompt') {
+             runCmd = `cd /d "${safeCwd}" & ${command}`;
+           } else {
+             runCmd = `cd "${safeCwd}" && ${command}`;
+           }
+        }
+        
+        if (activeInstanceProfile === 'PowerShell') {
+           runCmd = `${runCmd}; echo "${marker}$?"`;
+        } else if (activeInstanceProfile === 'Command Prompt') {
+           runCmd = `${runCmd} & echo ${marker}%ERRORLEVEL%`;
+        } else if (activeInstanceProfile === 'Node.js') {
+           runCmd = `${runCmd}`; // REPL, can't easily append shell commands
         } else {
-           runCmd = `${cwd ? `cd "${cwd.replace(/"/g, '\"')}" && ` : ''}${command} ; echo ${marker}$?`;
+           runCmd = `${runCmd}; echo "${marker}$?"`;
         }
         
         terminalService.sendData(termId, `${runCmd}\r`);
@@ -481,11 +493,16 @@ export default function Terminal() {
         if (data.sessionId === sessionId) {
           // Check for exit marker
           const str = data.data;
-          const match = str.match(/__AI_EXIT_CODE_=(\d+)/);
+          const match = str.match(/__AI_EXIT_CODE_=([a-zA-Z0-9]+)/);
           if (match) {
-             const exitCode = parseInt(match[1], 10);
+             let exitCode = 0;
+             const rawVal = match[1].toLowerCase();
+             if (rawVal === 'true') exitCode = 0;
+             else if (rawVal === 'false') exitCode = 1;
+             else exitCode = parseInt(rawVal, 10) || 0;
+             
              // Remove marker from output
-             const clean = str.replace(/__AI_EXIT_CODE_=\d+\r?\n?/, '');
+             const clean = str.replace(/__AI_EXIT_CODE_=[a-zA-Z0-9]+\r?\n?/, '');
              if (clean) term.write(clean);
              
              term.writeln(`\r\n\x1b[${exitCode === 0 ? '32' : '31'}mProcess exited with code ${exitCode}\x1b[0m`);
