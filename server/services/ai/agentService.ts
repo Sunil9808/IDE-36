@@ -5,6 +5,7 @@ import { promisify } from 'util';
 import { getChatCompletion, AIContext } from './aiService';
 import { NLUResult, ConversationEntry } from './nluService';
 import { getWorkspaceRoot, resolveWorkspacePath } from '../../utils/workspaceRoot';
+import { getIO } from '../../socket/socketServer';
 import {
   createFile as fsCreateFile,
   createDirectory as fsCreateDirectory,
@@ -20,6 +21,7 @@ type AgentAction =
   | { type: 'listFiles'; path?: string }
   | { type: 'readFile'; path: string }
   | { type: 'mkdir'; path: string }
+  | { type: 'createFile'; path: string; content?: string }
   | { type: 'writeFile'; path: string; content: string }
   | { type: 'appendFile'; path: string; content: string }
   | { type: 'runCommand'; command: string; cwd?: string }
@@ -212,6 +214,17 @@ async function runWorkspaceCommand(command: string, effectiveRoot: string): Prom
   }
 }
 
+function normalizeActionType(type: string): string {
+  const t = (type || '').toLowerCase().trim();
+  if (t === 'mkdir' || t.includes('folder') || t.includes('directory')) return 'mkdir';
+  if (t === 'writefile' || t.includes('write file') || t === 'write') return 'writeFile';
+  if (t === 'createfile' || t.includes('create file') || t === 'touch') return 'createFile';
+  if (t === 'deletefile' || t.includes('delete') || t.includes('remove')) return 'deleteFile';
+  if (t === 'renamefile' || t.includes('rename')) return 'renameFile';
+  if (t === 'appendfile' || t.includes('append')) return 'appendFile';
+  return type;
+}
+
 function extractJson(text: string): {
   summary?: string;
   plan?: string[];
@@ -226,49 +239,60 @@ function extractJson(text: string): {
   const end = text.lastIndexOf('}');
   const raw = fenced?.[1]?.trim() || (start >= 0 && end > start ? text.slice(start, end + 1) : text);
 
+  const cleanActions = (actions: any[]): AgentAction[] => {
+    return actions.map(a => ({
+      ...a,
+      type: normalizeActionType(a.type || ''),
+      path: a.path || a.target || ''
+    }));
+  };
+
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.actions)) {
+      parsed.actions = cleanActions(parsed.actions);
+    }
+    return parsed;
   } catch {
     // Try fixing trailing commas
     const fixed = raw.replace(/,\s*([\]}])/g, '$1');
     try {
-      return JSON.parse(fixed);
+      const parsed = JSON.parse(fixed);
+      if (Array.isArray(parsed.actions)) {
+        parsed.actions = cleanActions(parsed.actions);
+      }
+      return parsed;
     } catch {
       // Robust regex fallback to extract actions from broken JSON
       const actions: AgentAction[] = [];
       
-      // Matches both markdown-wrapped content and raw unescaped content
-      // Looks for "type", "path", and "content", then captures everything until the next action object or array end
+      // First match actions with content (writeFile, appendFile)
       const actionMatches = [...text.matchAll(/"type"\s*:\s*"([^"]+)"\s*,\s*(?:(?:target|"path")\s*:\s*"([^"]+)"\s*,\s*)?"content"\s*:\s*(?:["']?\s*```\w*\s*)?([\s\S]*?)(?:```\s*["']?\s*)?(?=\s*\}\s*,|\s*\}\s*\]|\s*\}\s*\})/g)];
-      
       if (actionMatches.length > 0) {
         for (const match of actionMatches) {
-          const type = match[1];
+          const type = normalizeActionType(match[1]);
           const path = match[2] || '';
           let content = match[3];
-          
-          // Remove leading/trailing quotes if the LLM accidentally added them but didn't escape inner quotes
           if (content.startsWith('"') && !content.startsWith('""')) {
             content = content.replace(/^"/, '').replace(/"$/, '');
           }
-          
           actions.push({ type, path, content: content.trim() } as any);
         }
-        return {
-          summary: 'Extracted actions via fallback parser',
-          plan: [],
-          actions,
-          nextSteps: []
-        };
       }
-      
-      const simpleMatches = [...text.matchAll(/"type"\s*:\s*"([^"]+)"\s*,\s*"path"\s*:\s*"([^"]+)"\s*,\s*"content"\s*:\s*"([\s\S]*?)"\s*\}/g)];
-      if (simpleMatches.length > 0) {
-        for (const match of simpleMatches) {
-          actions.push({ type: match[1], path: match[2], content: match[3].replace(/\\n/g, '\n').replace(/\\"/g, '"') } as any);
+
+      // Also match actions without content (mkdir, createFile, deleteFile)
+      const folderMatches = [...text.matchAll(/"type"\s*:\s*"([^"]+)"\s*,\s*(?:target|"path")\s*:\s*"([^"]+)"/g)];
+      for (const match of folderMatches) {
+        const type = normalizeActionType(match[1]);
+        const path = match[2];
+        if (!actions.some((a: any) => (a.path || a.target) === path)) {
+          actions.push({ type, path } as any);
         }
+      }
+
+      if (actions.length > 0) {
         return {
-          summary: 'Extracted actions via fallback parser (simple)',
+          summary: 'Extracted actions via parser',
           plan: [],
           actions,
           nextSteps: []
@@ -1127,7 +1151,22 @@ Always strictly obey the user's specific verb:
 
 ## Final Rule
 **What does the user want, what context is needed, and what is the smallest correct action required to complete it?**
-Perform minimum necessary actions and return the result.`;
+Perform minimum necessary actions and return the result.
+
+## USER REQUEST TO EXECUTE NOW:
+"${task}"
+
+CRITICAL MANDATORY INSTRUCTION:
+You MUST respond with ONLY a single valid JSON object.
+DO NOT output any conversational text, pleasantries, or explanations outside the JSON.
+Start your response immediately with "{" and end with "}".
+{
+  "summary": "Summary of actions taken",
+  "plan": ["Plan step"],
+  "actions": [
+    { "type": "mkdir", "path": "relative/folder/path" }
+  ]
+}`;
 }
 
 // ── Completeness validation ──────────────────────────────────────────────────
@@ -1271,6 +1310,9 @@ export async function runStreamingPairProgrammerAgent(
       rawText = accumulated;
     }
 
+    console.log('[DEBUG AGENT STREAM rawText length]:', rawText.length);
+    if (rawText.length < 500) console.log('[DEBUG AGENT STREAM rawText]:', rawText);
+
     try {
       parsed = extractJson(rawText);
       res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: 'plan', target: 'architecture', status: 'success' })}\n\n`);
@@ -1314,61 +1356,104 @@ export async function runStreamingPairProgrammerAgent(
     summary, plan: fullPlan, actions: [], nextSteps, extensionRecommendations, detectedLanguages: [],
   };
 
-  const isLocalWorkspace = context.workspaceType === 'local';
+  res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'execute', target: 'workspace', message: 'Applying changes to disk...' })}\n\n`);
 
-  res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'execute', target: 'workspace', message: 'Applying changes...' })}\n\n`);
-
+  let batchFailed = false;
   for (const action of allActions) {
     const actionPath = (action as any).path || (action as any).target || '';
     if (!actionPath && action.type !== 'detectLanguages') continue;
 
-    if (action.type === 'writeFile' || action.type === 'mkdir' || action.type === 'deleteFile' || action.type === 'createFile') {
-      if (processedFiles.has(actionPath)) {
-        res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: action.type, target: actionPath, status: 'success' })}\n\n`);
-      }
-    }
-
-    if (isLocalWorkspace) {
-      result.actions.push({ ...action, target: actionPath, success: true, output: 'Local workspace: handled by frontend' } as any);
+    if (batchFailed) {
+      result.actions.push({ ...action, target: actionPath, success: false, output: 'Skipped due to previous action failure' } as any);
       continue;
     }
 
-    // Execute on backend virtual workspace:
     try {
       if (action.type === 'mkdir') {
         const target = resolveAgentActionPath(actionPath, effectiveRoot);
-        await fsCreateDirectory(target);
-        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'Directory created' });
+        await fs.mkdir(target, { recursive: true });
+        const stat = await fs.stat(target);
+        if (!stat.isDirectory()) throw new Error(`Directory creation verification failed: ${actionPath}`);
+        result.actions.push({ ...action, type: action.type, target: actionPath, path: actionPath, resolvedPath: target, success: true, output: 'Directory created' } as any);
+      } else if (action.type === 'createFile') {
+        const a = action as { content?: string };
+        const target = resolveAgentActionPath(actionPath, effectiveRoot);
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        const contentToWrite = a.content || '';
+        await fs.writeFile(target, contentToWrite, 'utf-8');
+        const stat = await fs.stat(target);
+        if (!stat.isFile()) throw new Error(`File creation verification failed: ${actionPath}`);
+        result.actions.push({ ...action, type: action.type, target: actionPath, path: actionPath, resolvedPath: target, success: true, output: 'File created' } as any);
       } else if (action.type === 'writeFile') {
         const a = action as { content?: string };
         const target = resolveAgentActionPath(actionPath, effectiveRoot);
-        await fsWriteFile(target, a.content || '');
-        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File written' });
-      } else if (action.type === 'createFile') {
-        const target = resolveAgentActionPath(actionPath, effectiveRoot);
-        await fsCreateFile(target);
-        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File created' });
-      } else if (action.type === 'deleteFile') {
-        const target = resolveAgentActionPath(actionPath, effectiveRoot);
-        await fsDeleteFile(target);
-        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File deleted' });
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        const contentToWrite = a.content || '';
+        await fs.writeFile(target, contentToWrite, 'utf-8');
+        const stat = await fs.stat(target);
+        if (contentToWrite.length > 0 && stat.size === 0) {
+          throw new Error(`Write verification failed: file size 0 for ${actionPath}`);
+        }
+        result.actions.push({ ...action, type: action.type, target: actionPath, path: actionPath, resolvedPath: target, success: true, output: 'File written' } as any);
       } else if (action.type === 'appendFile') {
         const a = action as { content?: string };
         const target = resolveAgentActionPath(actionPath, effectiveRoot);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.appendFile(target, a.content || '', 'utf-8');
-        result.actions.push({ type: action.type, target: actionPath, success: true, output: 'File appended' });
+        const stat = await fs.stat(target);
+        if (!stat.isFile()) throw new Error(`Append verification failed: ${actionPath}`);
+        result.actions.push({ ...action, type: action.type, target: actionPath, path: actionPath, resolvedPath: target, success: true, output: 'File appended' } as any);
+      } else if (action.type === 'deleteFile') {
+        const target = resolveAgentActionPath(actionPath, effectiveRoot);
+        const exists = await fs.stat(target).then(() => true).catch(() => false);
+        if (exists) {
+          const stat = await fs.stat(target);
+          if (stat.isDirectory()) {
+            await fs.rm(target, { recursive: true, force: true });
+          } else {
+            await fs.unlink(target);
+          }
+        }
+        const stillExists = await fs.stat(target).then(() => true).catch(() => false);
+        if (stillExists) throw new Error(`Delete verification failed: ${actionPath}`);
+        result.actions.push({ ...action, type: action.type, target: actionPath, path: actionPath, resolvedPath: target, success: true, output: 'File deleted' } as any);
+      } else if (action.type === 'renameFile') {
+        const a = action as { oldPath: string; newPath: string };
+        const oldTarget = resolveAgentActionPath(a.oldPath, effectiveRoot);
+        const newTarget = resolveAgentActionPath(a.newPath, effectiveRoot);
+        await fs.mkdir(path.dirname(newTarget), { recursive: true });
+        await fs.rename(oldTarget, newTarget);
+        const newExists = await fs.stat(newTarget).then(() => true).catch(() => false);
+        if (!newExists) throw new Error(`Rename verification failed: ${a.newPath} does not exist`);
+        result.actions.push({ ...action, type: action.type, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'File renamed', resolvedPath: newTarget } as any);
+      } else if (action.type === 'readFile') {
+        const a = action as { path: string };
+        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        const content = await fs.readFile(target, 'utf-8');
+        result.actions.push({ ...action, type: action.type, target: a.path, success: true, output: content.slice(0, MAX_OUTPUT), resolvedPath: target } as any);
       } else {
         result.actions.push({ ...action, target: actionPath, success: true, output: 'Action processed' } as any);
       }
+
+      res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: action.type, target: actionPath, status: 'success' })}\n\n`);
     } catch (err: any) {
-      result.actions.push({ type: action.type, target: actionPath, success: false, output: err.message });
+      batchFailed = true;
+      result.actions.push({ ...action, type: action.type, target: actionPath, success: false, output: err.message, path: actionPath } as any);
+      res.write(`data: ${JSON.stringify({ type: 'tool_error', tool: action.type, target: actionPath, error: err.message })}\n\n`);
     }
   }
 
-  res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: 'execute', target: 'workspace', status: 'success' })}\n\n`);
+  // Notify clients via Socket.IO so Explorer updates automatically
+  try {
+    const io = getIO();
+    if (io) {
+      io.emit('fs:changed', { root: effectiveRoot });
+    }
+  } catch {}
+
+  res.write(`data: ${JSON.stringify({ type: 'tool_complete', tool: 'execute', target: 'workspace', status: batchFailed ? 'error' : 'success' })}\n\n`);
   
-  // Send final agent result so frontend can execute the file changes
+  // Send final agent result
   res.write(`data: ${JSON.stringify({ type: 'agent_result', result })}\n\n`);
 }
 
@@ -1528,54 +1613,67 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
 
       } else if (action.type === 'mkdir') {
         const a = action as { path: string };
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-        //   continue;
-        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
-        await fsCreateDirectory(target);
+        await fs.mkdir(target, { recursive: true });
+        const stat = await fs.stat(target);
+        if (!stat.isDirectory()) throw new Error(`Directory creation verification failed: ${a.path}`);
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'Directory created' });
+
+      } else if (action.type === 'createFile') {
+        const a = action as { path: string; content?: string };
+        const target = resolveAgentActionPath(a.path, effectiveRoot);
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        const contentToWrite = a.content || '';
+        await fs.writeFile(target, contentToWrite, 'utf-8');
+        const stat = await fs.stat(target);
+        if (!stat.isFile()) throw new Error(`File creation verification failed: ${a.path}`);
+        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File created' });
 
       } else if (action.type === 'writeFile') {
         const a = action as { path: string; content: string };
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-        //   // continue;
-        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
-        await fsWriteFile(target, a.content || '');
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        const contentToWrite = a.content || '';
+        await fs.writeFile(target, contentToWrite, 'utf-8');
+        const stat = await fs.stat(target);
+        if (contentToWrite.length > 0 && stat.size === 0) {
+          throw new Error(`Write verification failed: file size 0 for ${a.path}`);
+        }
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File written' });
 
       } else if (action.type === 'appendFile') {
         const a = action as { path: string; content: string };
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-          // continue;
-        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.appendFile(target, a.content || '', 'utf-8');
+        const stat = await fs.stat(target);
+        if (!stat.isFile()) throw new Error(`Append verification failed: ${a.path}`);
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File appended' });
 
       } else if (action.type === 'deleteFile') {
         const a = action as { path: string };
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Pending UI confirmation' });
-          // continue;
-        // }
         const target = resolveAgentActionPath(a.path, effectiveRoot);
-        await fsDeleteFile(target);
+        const exists = await fs.stat(target).then(() => true).catch(() => false);
+        if (exists) {
+          const stat = await fs.stat(target);
+          if (stat.isDirectory()) {
+            await fs.rm(target, { recursive: true, force: true });
+          } else {
+            await fs.unlink(target);
+          }
+        }
+        const stillExists = await fs.stat(target).then(() => true).catch(() => false);
+        if (stillExists) throw new Error(`Delete verification failed: ${a.path}`);
         result.actions.push({ type: action.type, target: a.path, success: true, output: 'File deleted' });
 
       } else if (action.type === 'renameFile') {
         const a = action as { oldPath: string; newPath: string };
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'Pending UI confirmation' });
-          // continue;
-        // }
         const oldTarget = resolveAgentActionPath(a.oldPath, effectiveRoot);
         const newTarget = resolveAgentActionPath(a.newPath, effectiveRoot);
-        await renameWorkspaceFile(oldTarget, newTarget);
+        await fs.mkdir(path.dirname(newTarget), { recursive: true });
+        await fs.rename(oldTarget, newTarget);
+        const newExists = await fs.stat(newTarget).then(() => true).catch(() => false);
+        if (!newExists) throw new Error(`Rename verification failed: ${a.newPath} does not exist`);
         result.actions.push({ type: action.type, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'File renamed' });
 
       } else if (action.type === 'installDependency') {
@@ -1653,6 +1751,14 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
       });
     }
   }
+
+  // Notify clients via Socket.IO so Explorer updates automatically
+  try {
+    const io = getIO();
+    if (io) {
+      io.emit('fs:changed', { root: effectiveRoot });
+    }
+  } catch {}
 
   return result;
 }

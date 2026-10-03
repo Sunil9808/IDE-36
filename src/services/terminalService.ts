@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { TerminalSession } from '../types/terminal.types';
+import { useWorkspaceStore } from '../store/workspaceStore';
 
 class TerminalService {
   private socket: Socket | null = null;
@@ -10,6 +11,23 @@ class TerminalService {
       this.socket = io('/', {
         transports: ['websocket'],
         path: '/socket.io',
+      });
+
+      this.socket.on('workspace:changed', (workspace: any) => {
+        const currentWorkspace = useWorkspaceStore.getState().workspace;
+        if (!currentWorkspace || currentWorkspace.path !== workspace.path) {
+          useWorkspaceStore.getState().setWorkspace(workspace, null);
+        }
+        window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed', { detail: workspace }));
+        window.dispatchEvent(new CustomEvent('ai-web-ide:refresh-explorer'));
+      });
+
+      this.socket.on('fs:changed', (data: any) => {
+        const currentWorkspace = useWorkspaceStore.getState().workspace;
+        if (data?.root && currentWorkspace?.path && data.root !== currentWorkspace.path) {
+          return;
+        }
+        window.dispatchEvent(new CustomEvent('ai-web-ide:refresh-explorer'));
       });
     }
     return this.socket;

@@ -13,6 +13,7 @@ import { useFileStore } from '../store/fileStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { useEditorStore } from '../store/editorStore';
 import { terminalService } from '../services/terminalService';
+import { workspaceService } from '../services/workspaceService';
 import { useTerminalStore } from '../store/terminalStore';
 import { initializeExtensionRuntime } from '../services/extensionRuntime';
 import { ErrorParser } from '../services/execution/ErrorParser';
@@ -47,8 +48,13 @@ export default function WorkspaceLayout() {
       window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search !== '?' ? cleanUrl.search : ''));
     }
 
-    setWorkspace(null);
-    setFileTree([]);
+    workspaceService.getCurrentWorkspace()
+      .then((ws) => {
+        setWorkspace(ws, null);
+      })
+      .catch((err) => {
+        console.warn('Could not load current workspace:', err);
+      });
 
     const cleanupRuntime = initializeExtensionRuntime();
     terminalService.connect();

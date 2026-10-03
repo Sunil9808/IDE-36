@@ -4,9 +4,19 @@ import {
   createDirectory, deleteFile, renameFile, searchFiles,
 } from '../services/fileSystem/fileSystemService';
 import { getWorkspaceRoot, resolveWorkspacePath } from '../utils/workspaceRoot';
+import { getIO } from '../socket/socketServer';
 
 function safePath(p: string): string {
   return resolveWorkspacePath(p);
+}
+
+function notifyFsChanged() {
+  try {
+    const io = getIO();
+    if (io) {
+      io.emit('fs:changed', { root: getWorkspaceRoot() });
+    }
+  } catch {}
 }
 
 export const fileController = {
@@ -36,6 +46,7 @@ export const fileController = {
       const { path: filePath, content } = req.body;
       if (!filePath) { res.status(400).json({ error: 'path is required' }); return; }
       await writeFile(safePath(filePath), content || '');
+      notifyFsChanged();
       res.json({ success: true });
     } catch (error) {
       next(error);
@@ -50,6 +61,7 @@ export const fileController = {
       const node = type === 'directory'
         ? await createDirectory(safe)
         : await createFile(safe, content || '');
+      notifyFsChanged();
       res.json(node);
     } catch (error) {
       next(error);
@@ -61,6 +73,7 @@ export const fileController = {
       const { path: filePath } = req.body;
       if (!filePath) { res.status(400).json({ error: 'path is required' }); return; }
       await deleteFile(safePath(filePath));
+      notifyFsChanged();
       res.json({ success: true });
     } catch (error) {
       next(error);
@@ -72,6 +85,7 @@ export const fileController = {
       const { oldPath, newPath } = req.body;
       if (!oldPath || !newPath) { res.status(400).json({ error: 'oldPath and newPath are required' }); return; }
       const node = await renameFile(safePath(oldPath), safePath(newPath));
+      notifyFsChanged();
       res.json(node);
     } catch (error) {
       next(error);

@@ -244,15 +244,10 @@ export function AgentPanel({}: AgentPanelProps) {
 
       
       if (finalData) {
-        if (workspace?.type !== 'local') {
-          // Backend executed the files synchronously
-          setIsApplied(true);
-          window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
-          setTask('');
-        } else {
-          // Automatically apply the plan
-          await handleApply(finalData);
-        }
+        setIsApplied(true);
+        window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
+        window.dispatchEvent(new CustomEvent('ai-web-ide:refresh-explorer'));
+        setTask('');
       }
     } catch (e: any) {
       console.error(e);

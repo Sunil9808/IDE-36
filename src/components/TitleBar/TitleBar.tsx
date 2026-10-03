@@ -23,10 +23,12 @@ import { useEditorStore } from '../../store/editorStore';
 import { useFileStore } from '../../store/fileStore';
 import { useUIStore } from '../../store/uiStore';
 import { fileService } from '../../services/fileService';
+import { workspaceService } from '../../services/workspaceService';
 import { browserFileCache } from '../../services/browserFileCache';
 import { FileNode } from '../../types/file.types';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useSourceControlStore } from '../../store/sourceControlStore';
+import { LocalFileBrowserModal } from './LocalFileBrowserModal';
 
 interface MenuItem {
   label: string;
@@ -97,6 +99,7 @@ export default function TitleBar() {
   const activeTab = getActiveTab();
   const hasActiveTab = Boolean(activeTab);
   const hasDirtyTabs = tabs.some((tab) => tab.isDirty);
+  const [showFileBrowserModal, setShowFileBrowserModal] = useState(false);
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -391,49 +394,39 @@ export default function TitleBar() {
   
   const triggerOpenFolder = async () => {
     try {
-      if (!('showDirectoryPicker' in window)) {
-        notify('Your browser does not support the Native File System API. Please use a modern version of Chrome, Edge, or Opera.', 'error');
-        return;
+      notify('Opening folder picker...', 'info');
+      const res = await fetch('/api/workspace/pick-folder');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.path) {
+          closeAllTabs();
+          const ws = await workspaceService.openWorkspace(data.path);
+          setWorkspace(ws, null);
+          notify(`Workspace opened: ${ws.name}`, 'success');
+          window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
+          window.dispatchEvent(new CustomEvent('ai-web-ide:refresh-explorer'));
+          return;
+        } else if (data.canceled) {
+          return;
+        }
       }
+    } catch {}
 
-      notify('Waiting for folder selection...', 'info');
-      // Request native directory picker
-      const dirHandle = await (window as any).showDirectoryPicker({
-        mode: 'readwrite',
-      });
+    // Fallback: show local file browser modal
+    setShowFileBrowserModal(true);
+  };
 
-      if (!dirHandle) return;
-
-      const workspaceId = `local-${Date.now()}`;
-      const workspaceName = dirHandle.name;
-      
+  const handleSelectFolderModal = async (selectedPath: string) => {
+    setShowFileBrowserModal(false);
+    try {
       closeAllTabs();
-      
-      // We pass the handle to setWorkspace so it can be used by fileService
-      setWorkspace({ 
-        id: workspaceId, 
-        name: workspaceName, 
-        path: `/${workspaceName}`, // Virtual path for UI purposes
-        type: 'local', 
-        createdAt: Date.now(), 
-        lastOpenedAt: Date.now(),
-        settings: {
-          theme: 'dark',
-          fontSize: 14,
-          tabSize: 2,
-          formatOnSave: true,
-          aiEnabled: true,
-          terminalShell: 'bash'
-        },
-        recentFiles: []
-      }, dirHandle);
-      
-      notify(`Workspace opened: ${workspaceName}`, 'success');
+      const ws = await workspaceService.openWorkspace(selectedPath);
+      setWorkspace(ws, null);
+      notify(`Workspace opened: ${ws.name}`, 'success');
       window.dispatchEvent(new CustomEvent('ai-web-ide:workspace-changed'));
+      window.dispatchEvent(new CustomEvent('ai-web-ide:refresh-explorer'));
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        notify(`Failed to open folder: ${err.message || String(err)}`, 'error');
-      }
+      notify(`Failed to open workspace: ${err.message || String(err)}`, 'error');
     }
   };
 
@@ -1167,6 +1160,12 @@ export default function TitleBar() {
         </div>
       </div>
 
+      {showFileBrowserModal && (
+        <LocalFileBrowserModal
+          onClose={() => setShowFileBrowserModal(false)}
+          onSelect={handleSelectFolderModal}
+        />
+      )}
     </div>
   );
 };

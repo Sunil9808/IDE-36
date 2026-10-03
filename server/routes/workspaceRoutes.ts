@@ -64,6 +64,7 @@ router.get('/current', async (_req: Request, res: Response, next: NextFunction) 
       id: Buffer.from(root).toString('base64').slice(0, 16),
       name: path.basename(root),
       path: root,
+      type: 'local',
       createdAt: Date.now(),
       lastOpenedAt: Date.now(),
     });
@@ -82,8 +83,13 @@ router.post('/set-root', async (req: Request, res: Response, next: NextFunction)
       id: Buffer.from(root).toString('base64').slice(0, 16),
       name: path.basename(root),
       path: root,
+      type: 'local',
+      createdAt: Date.now(),
+      lastOpenedAt: Date.now(),
     });
-  } catch (error) { next(error); }
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Failed to set workspace root' });
+  }
 });
 
 router.get('/list', async (req: Request, res: Response, next: NextFunction) => {
@@ -97,6 +103,7 @@ router.get('/list', async (req: Request, res: Response, next: NextFunction) => {
         id: Buffer.from(e.name).toString('base64').slice(0, 16),
         name: e.name,
         path: path.join(root, e.name),
+        type: 'local',
         createdAt: Date.now(),
         lastOpenedAt: Date.now(),
       }));
@@ -130,6 +137,7 @@ router.post('/create', async (req: Request, res: Response, next: NextFunction) =
       id: Buffer.from(name).toString('base64').slice(0, 16),
       name,
       path: workspacePath,
+      type: 'local',
       createdAt: Date.now(),
       lastOpenedAt: Date.now(),
     });
@@ -142,17 +150,20 @@ router.post('/open', async (req: Request, res: Response, next: NextFunction) => 
     if (!wsPath) { res.status(400).json({ error: 'path is required' }); return; }
     
     // Auto-update workspace root to the opened directory
-    setWorkspaceRoot(wsPath);
+    const activeRoot = setWorkspaceRoot(wsPath);
     
-    const name = path.basename(wsPath);
+    const name = path.basename(activeRoot);
     res.json({
-      id: Buffer.from(wsPath).toString('base64').slice(0, 16),
+      id: Buffer.from(activeRoot).toString('base64').slice(0, 16),
       name,
-      path: wsPath,
+      path: activeRoot,
+      type: 'local',
       createdAt: Date.now(),
       lastOpenedAt: Date.now(),
     });
-  } catch (error) { next(error); }
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Failed to open workspace' });
+  }
 });
 
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
