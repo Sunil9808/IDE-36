@@ -4,6 +4,7 @@ import { useExtensionStore } from '../../store/extensionStore';
 import { useEditorStore } from '../../store/editorStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useSourceControlStore } from '../../store/sourceControlStore';
+import { useAIStore } from '../../store/aiStore';
 import { getActiveExtensionIds } from '../../services/extensionRuntime';
 
 export default function StatusBar() {
@@ -20,6 +21,8 @@ export default function StatusBar() {
   const activeExtCount = getActiveExtensionIds().size;
   const workspace = useWorkspaceStore((s) => s.workspace);
   const branch = useSourceControlStore((s) => s.branch);
+  const isStreaming = useAIStore((s) => s.isStreaming);
+  const isLoading = useAIStore((s) => s.isLoading);
 
   const showPanel = (panel: 'terminal' | 'output' | 'problems' | 'debug' | 'ports') => {
     setActiveBottomPanel(panel);
@@ -41,6 +44,17 @@ export default function StatusBar() {
     <div className="status-bar no-select">
       {/* Left section */}
       <div className="status-bar-left">
+        {/* AI Indicator */}
+        <button
+          title="Anywhere AI"
+          className="status-btn"
+          style={{ color: (isStreaming || isLoading) ? 'var(--accent)' : 'var(--text-1)' }}
+          onClick={() => setRightPanelVisible(true)}
+        >
+          <Sparkles size={12} className={(isStreaming || isLoading) ? 'animate-pulse' : ''} />
+          <span>{(isStreaming || isLoading) ? 'AI Working...' : 'AI Ready'}</span>
+        </button>
+
         {/* Branch indicator — accent colored */}
         <button
           title="Source Control"

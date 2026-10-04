@@ -43,16 +43,16 @@ export default function SettingsEditor() {
   };
 
   return (
-    <div className="h-full overflow-y-auto" style={{ background: 'var(--color-background)', color: 'var(--color-text)' }}>
-      <div className="mx-auto max-w-[980px] px-8 py-7">
-        <div className="mb-7 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md" style={{ background: '#25313a', color: '#7dd3fc' }}>
-            <Settings size={22} />
+    <div className="h-full overflow-y-auto bg-[var(--bg-0)] text-[var(--text-0)]">
+      <div className="mx-auto max-w-[980px] px-8 py-10">
+        <div className="mb-10 flex items-center gap-4 border-b border-[var(--border-0)] pb-6">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-dim)] text-[var(--accent)] shadow-sm">
+            <Settings size={24} />
           </div>
           <div>
-            <h1 className="text-[22px] font-semibold leading-tight">IDE Settings</h1>
-            <p className="mt-1 text-[12px]" style={{ color: 'var(--color-textMuted)' }}>
-              Configure the editor and workspace interface.
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--text-0)]">IDE Settings</h1>
+            <p className="mt-1.5 text-[13px] text-[var(--text-1)]">
+              Configure the editor and workspace interface to match your workflow.
             </p>
           </div>
         </div>
@@ -132,8 +132,8 @@ export default function SettingsEditor() {
         </SettingsSection>
 
         <SettingsSection icon={Code2} title="Layout">
-          <p className="text-[12px] leading-5" style={{ color: 'var(--color-textMuted)' }}>
-            Layout toggles above update the IDE immediately. Editor-specific settings apply to Monaco as you open or focus files.
+          <p className="text-[13px] leading-relaxed text-[var(--text-1)] p-4">
+            Layout toggles above update the IDE immediately. Editor-specific settings apply to the code editor as you open or focus files.
           </p>
         </SettingsSection>
       </div>
@@ -143,12 +143,12 @@ export default function SettingsEditor() {
 
 function SettingsSection({ icon: Icon, title, children }: { icon: typeof Settings; title: string; children: React.ReactNode }) {
   return (
-    <section className="mb-5 rounded-md border" style={{ borderColor: 'var(--color-border)', background: 'rgba(255,255,255,0.025)' }}>
-      <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
-        <Icon size={16} style={{ color: '#7dd3fc' }} />
-        <h2 className="text-[13px] font-semibold">{title}</h2>
+    <section className="mb-6 rounded-lg border border-[var(--border-0)] bg-[var(--bg-1)] shadow-sm overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-[var(--border-0)] bg-[var(--bg-2)]/50 px-4 py-3">
+        <Icon size={16} className="text-[var(--accent)]" />
+        <h2 className="text-[13px] font-semibold text-[var(--text-0)] uppercase tracking-wider">{title}</h2>
       </div>
-      <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="divide-y divide-[var(--border-0)]">
         {children}
       </div>
     </section>
@@ -157,9 +157,12 @@ function SettingsSection({ icon: Icon, title, children }: { icon: typeof Setting
 
 function ToggleSetting({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
-    <label className="flex min-h-[48px] items-center justify-between gap-4 px-4 py-3">
-      <span className="text-[13px]">{label}</span>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />
+    <label className="flex min-h-[48px] items-center justify-between gap-4 px-4 py-3 cursor-pointer hover:bg-[var(--bg-2)]/30 transition-colors group">
+      <span className="text-[13px] text-[var(--text-1)] group-hover:text-[var(--text-0)] transition-colors font-medium">{label}</span>
+      <div className="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" className="sr-only peer" checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />
+        <div className="w-9 h-5 bg-[var(--bg-4)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--accent)] border border-[var(--border-2)] peer-checked:border-[var(--accent)] shadow-inner"></div>
+      </div>
     </label>
   );
 }
@@ -180,12 +183,15 @@ function RangeSetting({
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="grid min-h-[56px] grid-cols-[180px_1fr_64px] items-center gap-4 px-4 py-3">
-      <span className="text-[13px]">{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.currentTarget.value))} />
+    <label className="grid min-h-[56px] grid-cols-[180px_1fr_72px] items-center gap-4 px-4 py-3 hover:bg-[var(--bg-2)]/30 transition-colors group">
+      <span className="text-[13px] text-[var(--text-1)] group-hover:text-[var(--text-0)] transition-colors font-medium">{label}</span>
+      <input 
+        type="range" min={min} max={max} step={step} value={value} 
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+        className="w-full h-1.5 bg-[var(--bg-4)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" 
+      />
       <input
-        className="h-7 rounded border px-2 text-[12px]"
-        style={{ background: 'var(--color-input)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+        className="h-7 w-full rounded border border-[var(--border-1)] bg-[var(--bg-0)] px-2 text-[12px] text-[var(--text-0)] outline-none focus:border-[var(--accent)] transition-colors text-center"
         type="number"
         min={min}
         max={max}
@@ -209,11 +215,10 @@ function SelectSetting({
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid min-h-[52px] grid-cols-[180px_1fr] items-center gap-4 px-4 py-3">
-      <span className="text-[13px]">{label}</span>
+    <label className="grid min-h-[52px] grid-cols-[180px_1fr] items-center gap-4 px-4 py-3 hover:bg-[var(--bg-2)]/30 transition-colors group">
+      <span className="text-[13px] text-[var(--text-1)] group-hover:text-[var(--text-0)] transition-colors font-medium">{label}</span>
       <select
-        className="h-8 rounded border px-2 text-[12px]"
-        style={{ background: 'var(--color-input)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+        className="h-8 w-full max-w-[300px] rounded border border-[var(--border-1)] bg-[var(--bg-0)] px-2.5 text-[12px] text-[var(--text-0)] outline-none focus:border-[var(--accent)] transition-colors cursor-pointer shadow-sm"
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
       >

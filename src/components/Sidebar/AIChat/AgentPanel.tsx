@@ -709,11 +709,107 @@ export function AgentPanel({}: AgentPanelProps) {
         </div>
       )}
 
+<<<<<<< HEAD
       <div className="flex-shrink-0 mt-2 pt-2 border-t border-[var(--border-0)]">
         {(!workspace || workspace.type !== 'local') && (
           <div className="mb-2 text-xs text-[var(--warning)] flex items-center gap-1 px-2.5 py-1 bg-[#f59e0b1a] border border-[#f59e0b33] rounded-lg">
             <AlertTriangle size={13} /> No local folder open — file changes will be applied to the virtual workspace
           </div>
+=======
+      <div className="flex-shrink-0 mt-2 pt-4 border-t border-[var(--border-0)]">
+        <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--accent)' }}>
+          AI Pair
+        </label>
+        <div className="relative flex flex-col bg-[var(--bg-0)] border border-[var(--border-1)] rounded-xl focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent-dim)] transition-all shadow-sm">
+          <input type="file" ref={fileInputRef} onChange={handleFileAttach} className="hidden" />
+          
+          <textarea
+            className={`w-full bg-transparent text-sm p-3 resize-none min-h-[80px] outline-none custom-scrollbar ${(!workspace || workspace.type !== 'local') ? 'opacity-50 cursor-not-allowed' : ''}`}
+            placeholder="Ask anything or tell me what you want to build or change..."
+            value={task}
+            onChange={(e) => setTask(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (task.trim() && !isPlanning && !isApplying) {
+                  handlePlan(false);
+                }
+              }
+            }}
+            disabled={!workspace || workspace.type !== 'local'}
+          />
+          
+          <div className="flex items-center justify-between p-2">
+            <div className="flex items-center gap-1">
+              <div className="relative shrink-0">
+                <button 
+                  onClick={() => setShowAttachMenu(!showAttachMenu)}
+                  className="p-1.5 text-[var(--text-1)] hover:text-[var(--text-0)] hover:bg-[var(--bg-2)] rounded-md transition-colors flex items-center justify-center"
+                  title="Add Context"
+                >
+                  <Plus size={16} />
+                </button>
+                
+                {showAttachMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowAttachMenu(false)} />
+                    <div className="absolute bottom-full left-0 mb-2 w-48 bg-[var(--bg-1)] border border-[var(--border-0)] rounded-lg shadow-lg overflow-hidden flex flex-col z-50 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="px-3 py-2 text-xs font-semibold text-[var(--text-2)] border-b border-[var(--border-0)] bg-[var(--bg-2)]/50">
+                        Add Context
+                      </div>
+                      <button 
+                        onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
+                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
+                      >
+                        <Image size={14} /> Media
+                      </button>
+                      <button 
+                        onClick={() => { alert("Mentions coming soon!"); setShowAttachMenu(false); }}
+                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
+                      >
+                        <AtSign size={14} /> Mentions
+                      </button>
+                      <button 
+                        onClick={() => { alert("Actions coming soon!"); setShowAttachMenu(false); }}
+                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
+                      >
+                        <Zap size={14} /> Actions
+                      </button>
+                      <button 
+                        onClick={() => { alert("Browser coming soon!"); setShowAttachMenu(false); }}
+                        className="flex items-center gap-2 px-3 py-2.5 text-sm text-[var(--text-1)] hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] transition-colors w-full text-left"
+                      >
+                        <Globe size={14} /> Browser
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              <ModelSelector />
+              
+            </div>
+            
+            {/* Right side Generate button */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[var(--text-2)] hidden xl:inline-block font-mono">⌘ Enter</span>
+              <button
+                onClick={() => handlePlan(false)}
+                disabled={isPlanning || isApplying || (!task.trim() && !pendingQuestion) || (!workspace || workspace.type !== 'local')}
+                className="px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-h)] text-white text-xs rounded-md font-medium flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                {isPlanning || isApplying ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                {isPlanning || isApplying ? 'Working...' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+        {(!workspace || workspace.type !== 'local') && (
+          <div className="mt-3 p-3 text-sm text-[var(--warning)] bg-[#f59e0b1a] border border-[#f59e0b33] rounded-lg flex items-start gap-2">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span className="break-words">Please open a local folder to use the AI Pair.</span>
+          </div>
+>>>>>>> refs/rewritten/terminal1
         )}
 
         <AIChatInputBar

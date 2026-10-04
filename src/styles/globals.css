@@ -5,44 +5,43 @@
 @tailwind utilities;
 
 /* ========================================================================
-   DESIGN SYSTEM - VOID DARK THEME
+   DESIGN SYSTEM - MODERN DARK THEME
    ======================================================================== */
 :root {
-  --bg-0:            #07080d;
-  --bg-1:            #0c0d14;
-  --bg-2:            #10121a;
-  --bg-3:            #161825;
-  --bg-4:            #1c1f2e;
+  --bg-0:            #0e0e11;
+  --bg-1:            #141419;
+  --bg-2:            #1a1a21;
+  --bg-3:            #21212a;
+  --bg-4:            #2a2a35;
 
-  --border-0:        #1a1d2e;
-  --border-1:        #222538;
-  --border-2:        #2e3250;
-  --border-focus:    rgba(124,109,245,0.7);
+  --border-0:        #1f1f26;
+  --border-1:        #2b2b36;
+  --border-2:        #3a3a48;
+  --border-focus:    rgba(94, 163, 248, 0.7);
 
-  --text-0:          #eceef5;
-  --text-1:          #8b90aa;
-  --text-2:          #464c6a;
+  --text-0:          #f0f0f4;
+  --text-1:          #9ca3af;
+  --text-2:          #6b7280;
   --text-on-accent:  #ffffff;
   
-  --glass-bg:        rgba(12, 13, 20, 0.65);
-  --glass-border:    rgba(255, 255, 255, 0.08);
-  --glass-blur:      backdrop-filter: blur(12px) saturate(180%);
+  --glass-bg:        rgba(20, 20, 25, 0.7);
+  --glass-border:    rgba(255, 255, 255, 0.06);
+  --glass-blur:      backdrop-filter: blur(16px) saturate(180%);
 
+  --accent:          #3b82f6;
+  --accent-h:        #60a5fa;
+  --accent-p:        #2563eb;
+  --accent-dim:      rgba(59, 130, 246, 0.15);
+  --accent-glow:     0 0 0 1px rgba(59, 130, 246, 0.4), 0 0 20px rgba(59, 130, 246, 0.2);
 
-  --accent:          #7c6df5;
-  --accent-h:        #9485f8;
-  --accent-p:        #5b4de0;
-  --accent-dim:      rgba(124,109,245,0.12);
-  --accent-glow:     0 0 0 1px rgba(124,109,245,0.35), 0 0 20px rgba(124,109,245,0.18);
-
-  --success:         #22c55e;
-  --success-dim:     rgba(34,197,94,0.12);
+  --success:         #10b981;
+  --success-dim:     rgba(16, 185, 129, 0.15);
   --warning:         #f59e0b;
-  --warning-dim:     rgba(245,158,11,0.12);
+  --warning-dim:     rgba(245, 158, 11, 0.15);
   --error:           #ef4444;
-  --error-dim:       rgba(239,68,68,0.12);
+  --error-dim:       rgba(239, 68, 68, 0.15);
   --info:            #3b82f6;
-  --info-dim:        rgba(59,130,246,0.12);
+  --info-dim:        rgba(59, 130, 246, 0.15);
 
   --color-background:   var(--bg-1);
   --color-sidebar:      var(--bg-2);

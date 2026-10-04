@@ -116,7 +116,10 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
 
     // Keyboard shortcuts
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      handleSave(editor, filePath, tabId);
+      const activeTab = useEditorStore.getState().getActiveTab();
+      if (activeTab) {
+        handleSave(editor, activeTab.filePath, activeTab.id);
+      }
     });
 
     editor.onContextMenu((event: Monaco.editor.IEditorMouseEvent) => {
