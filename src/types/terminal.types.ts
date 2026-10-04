@@ -1,11 +1,18 @@
+export type TerminalProfile = 'PowerShell' | 'Command Prompt' | 'Git Bash' | 'WSL' | 'Bash' | 'Node.js';
+
 export interface TerminalSession {
   id: string;
   name: string;
   pid?: number;
   shell: string;
+  profile: TerminalProfile;
   cwd: string;
   isActive: boolean;
   isConnected: boolean;
+  status: 'connecting' | 'connected' | 'fallback' | 'exited' | 'error';
+  statusMessage?: string;
+  rows?: number;
+  cols?: number;
   createdAt: number;
 }
 

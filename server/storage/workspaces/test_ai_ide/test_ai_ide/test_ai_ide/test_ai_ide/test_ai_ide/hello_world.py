@@ -1,1 +1,0 @@
-# hello_world.py\n\n# Hello World program in Python\n\ndef hello_world():\n    print('Hello, World!')\n\n# Main function\n\ndef main():\n    hello_world()\n\n# Run the main function\n\nif __name__ == '__main__':\n    main()\n

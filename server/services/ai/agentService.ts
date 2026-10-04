@@ -38,6 +38,13 @@ export interface AgentResult {
   actions: Array<{
     type: string;
     target: string;
+    path?: string;
+    content?: string;
+    oldPath?: string;
+    newPath?: string;
+    command?: string;
+    question?: string;
+    options?: string[];
     success: boolean;
     output: string;
   }>;
@@ -145,15 +152,6 @@ export function resolveAgentActionPath(value: string, effectiveRoot: string): st
     throw new Error(`Refusing to access path outside workspace: ${value}`);
   }
 
-  // Security guard: If the effectiveRoot resolves to the IDE application root,
-  // we must prevent the AI from creating or modifying internal IDE application folders and configuration files.
-  // Because we now support arbitrary local workspaces, we just ensure the user hasn't 
-  // accidentally set the IDE source tree as their workspace.
-  const baseRoot = process.cwd(); // The IDE source root
-  if (path.resolve(effectiveRoot) === path.resolve(baseRoot)) {
-    throw new Error(`Security Exception: Cannot use the IDE source directory as the workspace root. Please open a different local folder.`);
-  }
-
   return resolved;
 }
 
@@ -233,11 +231,34 @@ function extractJson(text: string): {
   extensionRecommendations?: Array<{ extensionId: string; language: string; reason: string }>;
   remainingFiles?: string[];
 } {
-  // Try markdown fenced JSON block first
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  // 1. Try markdown fenced JSON blocks (search backwards for final JSON block)
+  const fencedMatches = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  for (let i = fencedMatches.length - 1; i >= 0; i--) {
+    const candidate = fencedMatches[i][1].trim();
+    if (candidate.includes('"actions"') || candidate.includes('"summary"')) {
+      try { return JSON.parse(candidate); } catch {}
+      try { return JSON.parse(candidate.replace(/,\s*([\]}])/g, '$1')); } catch {}
+    }
+  }
+
+  // 2. Search for object enclosing "summary" or "actions"
+  const actionsIdx = text.lastIndexOf('"actions"');
+  const summaryIdx = text.lastIndexOf('"summary"');
+  const targetIdx = Math.max(actionsIdx, summaryIdx);
+  if (targetIdx >= 0) {
+    const objectStart = text.lastIndexOf('{', targetIdx);
+    const objectEnd = text.lastIndexOf('}');
+    if (objectStart >= 0 && objectEnd > objectStart) {
+      const candidate = text.slice(objectStart, objectEnd + 1).trim();
+      try { return JSON.parse(candidate); } catch {}
+      try { return JSON.parse(candidate.replace(/,\s*([\]}])/g, '$1')); } catch {}
+    }
+  }
+
+  // 3. Fallback to outer braces
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  const raw = fenced?.[1]?.trim() || (start >= 0 && end > start ? text.slice(start, end + 1) : text);
+  const raw = (start >= 0 && end > start ? text.slice(start, end + 1) : text).trim();
 
   const cleanActions = (actions: any[]): AgentAction[] => {
     return actions.map(a => ({
@@ -857,17 +878,18 @@ RULES FOR REACT LOOP:
 - Only once you have gathered all necessary information should you proceed to step 4 (Plan) and step 5 (Edit).
 
 CRITICAL RESTRICTION: You must NEVER change the code in files or folders of the IDE's own source code (e.g. the AI Web IDE itself). You ONLY operate on the user's files inside their virtual workspace.
-You are a highly capable AI Pair Developer. You can answer questions, explain concepts, and write code.
-When writing code, you behave like a SENIOR SOFTWARE ENGINEER who delivers COMPLETE, PRODUCTION-READY features.
+You are NOT a chatbot. You do NOT give instructions. You WRITE CODE directly to files.
+You behave like a SENIOR SOFTWARE ENGINEER who delivers COMPLETE, PRODUCTION-READY features.
 
-CRITICAL EXECUTION RULES:
-  0. Whenever you reference or mention a file path in your summary or chat response, ALWAYS format it as a markdown link: [path/to/file.ext](path/to/file.ext) so the user can click it.
-1. When asked to create or build something, you MUST return writeFile actions with COMPLETE file contents.
+CRITICAL RULES:
+1. You MUST return writeFile actions with COMPLETE file contents for every file the user asks you to create or modify.
 2. NEVER say "create a file called...", "you can add...", "here's what it should look like...". Instead, USE writeFile to actually write it.
 3. NEVER tell the user to do something manually. YOU do it by returning actions.
-4. If the user says "add X to file Y", you MUST read file Y first (readFile), then return a replaceText or writeFile action with the updated contents.
-6. When modifying an existing file, ALWAYS use readFile first to get current contents, then writeFile with the full updated content.
-${context.workspaceType === 'local' ? '\n7. CRITICAL: The user is in a Native Local Workspace. DO NOT generate `runCommand` or `installDependency` actions, because terminal commands cannot be run from the browser locally. Only use file operations (writeFile, deleteFile, etc.).' : ''}
+4. If the user says "add X to file Y", you MUST read file Y first (readFile), then return a writeFile with the COMPLETE updated contents.
+5. If the user mentions a filename (like "index.html", "script.js"), you MUST create or modify that file using writeFile.
+6. Every response MUST have at least one action. If unsure, create the files the user is most likely referring to.
+7. When modifying an existing file, ALWAYS use readFile first to get current contents, then writeFile with the full updated content.
+${context.workspaceType === 'local' ? '\n8. CRITICAL: The user is in a Native Local Workspace. DO NOT generate `runCommand` or `installDependency` actions, because terminal commands cannot be run from the browser locally. Only use file operations (writeFile, deleteFile, etc.).' : ''}
 
 # STRICT FOLDER AND FILE MANAGEMENT RULES
 
@@ -903,9 +925,8 @@ The final project must be both: FUNCTIONALLY CORRECT + STRUCTURALLY CORRECT
 26. LARGE FEATURE RULE: Do not put a massive feature into one file. Separate UI, API, state appropriately.
 27. NEW PROJECT RULE: Establish the project foundation and structure FIRST before implementing feature files.
 28. BEFORE FILE CREATION: Internally decide on files to reuse vs create vs modify.
-29. CROSS-FILE CONNECTION RULE: When generating multiple related files (e.g., HTML, CSS, JS), you MUST explicitly connect them! Your HTML file MUST contain '<link rel="stylesheet" href="style.css">' and '<script src="script.js"></script>'. Do not generate disconnected files that don't load each other!
-30. BEFORE FINISHING: Inspect the structure. Ensure no duplicates, correct directories, and clean imports.
-31. FINAL RULE: Optimize for: "The code runs, the files are correctly placed, responsibilities are clear, the structure follows the project architecture, and another developer can understand the project."
+29. BEFORE FINISHING: Inspect the structure. Ensure no duplicates, correct directories, and clean imports.
+30. FINAL RULE: Optimize for: "The code runs, the files are correctly placed, responsibilities are clear, the structure follows the project architecture, and another developer can understand the project."
 
 # PRECISE VERB-BASED INTENT MAP & EXECUTION RULES
 
@@ -936,6 +957,40 @@ EXECUTION RULES:
 3. Touch each path at most once per user message. NEVER re-create a file that already exists.
 4. Skip long plans for simple requests. Execute directly.
 5. Do not run terminal commands unless asked. Ask before deleting, overwriting a non-empty file, or installing anything.
+
+FILE CREATION AND COMPLETION INSTRUCTIONS:
+- Add files, Create files, Build files, Generate files, Write files, Implement files, Complete files
+- Finish the project, Continue building, Add missing files, Generate missing files
+- Complete the folder structure, Populate the files, Write code into files, Implement the remaining project
+
+When I use any of these commands, do not only explain what should be done and do not create another folder structure.
+
+Instead:
+1. Inspect the currently opened project and existing folder structure.
+2. Detect which files already exist.
+3. Detect which required files are missing.
+4. Create all missing files in their correct locations.
+5. Write complete working code into every newly created file.
+6. If an existing file is empty or incomplete, complete its implementation.
+7. Do not overwrite working code unnecessarily.
+8. Maintain correct connections between HTML, CSS, JavaScript, backend, APIs, imports, and other dependencies.
+9. Continue automatically until the requested feature or project is fully implemented.
+10. Never consider the task complete just because folders exist.
+
+Important:
+Commands such as "add files", "build files", "generate files", "write to files", or similar commands should trigger actual file creation and code implementation.
+Always perform the action directly on the project files. Do not just display code in the chat unless I specifically ask you to show the code instead of creating the files.
+
+Before finishing, verify:
+- Required folders exist
+- Required files exist
+- Missing files have been created
+- Files contain actual implementation
+- No required file is empty
+- File paths and imports are correct
+- The feature is ready to run
+
+A project with only folders is NOT complete. Continue from the current project state and implement the missing files until the requested task is finished.
 
 ### Example
 
@@ -998,18 +1053,12 @@ Workspace facts:
 - Detected languages: ${detectedLangs.join(', ') || 'none detected'}
 - Existing files: ${workspaceFiles.length > 0 ? workspaceFiles.join('\n') : '(empty workspace)'}
 - CRITICAL RULE: Always trust the "Existing files" list above. If the workspace is empty or missing files, it means your previous actions failed or the user deleted them. You MUST recreate the files from scratch. DO NOT assume files exist just because you output them in the conversation history!
-- EXACT FILE PATHS: Paths in actions are RELATIVE to the workspace root. You MUST use the exact path shown in the "Existing files" list. If there are multiple files with the same name (e.g., 'index.html' and 'subfolder/index.html'), you MUST specify the exact directory path to avoid writing code to the wrong file!
-- INCREMENTAL PROJECT BUILDING & EVOLUTION: Treat every project as a continuously evolving system. Do NOT generate the complete future architecture at the beginning unless explicitly required.
-  * ALWAYS work from the CURRENT project state (check "Existing files").
-  * Compare the new requirement with the existing implementation. Determine the minimum correct set of changes required.
-  * MODIFY EXISTING FILE: If the new functionality logically belongs there. Do not create new files unnecessarily.
-  * CREATE NEW FILE: If the functionality is a separate component, existing files would become too large, or project architecture requires separation. Place in the most appropriate existing directory.
-  * CREATE NEW DIRECTORY: Only when a new feature contains multiple related files, the project needs logical separation, or a new independent module is required.
-  * SCALABLE PROJECT STRUCTURE GENERATION: Before scaffolding, classify as Small, Medium, Large, or Enterprise.
-    - SMALL: Direct generation (index.html, style.css, script.js).
-    - MEDIUM/LARGE: Use hierarchical generation. Create high-level structure first, expand modules incrementally.
-  * PROJECT GROWTH: The architecture must evolve organically. A simple project might start flat and evolve into frontend/backend directories later. Preserve and migrate existing code when restructuring. NEVER regenerate the entire project blindly.
-  * FINAL RULE: First ask internally: "What already exists, and what is the smallest correct architectural change required?" Then choose to modify a file, create a new file, or create a new directory.
+- Paths in actions are RELATIVE to the workspace root.
+- Keep the folder structure proportional to the project size. For simple components or projects (like a login page or todo list), keep related files in a single simple folder.
+- STRICT RULE AGAINST OVER-ENGINEERING: For simple apps, NEVER create deeply nested architectures like 'api/controllers', 'api/models', or 'api/services'. Keep backend logic in a single 'server.js' file.
+- Avoid creating stray source files at the root (like 'script.js' or 'style.css'). Frontend assets must go inside 'public/' or 'src/'.
+- You must create the necessary directory structure using 'mkdir' actions if needed, though 'writeFile' will automatically create parent directories.
+- If the user requests a specific project or folder name, use that exact name at the workspace root.
 
 Active file context:
 ${activeFile}
@@ -1021,10 +1070,10 @@ Available action types:
 - listFiles: { "type": "listFiles", "path": "." }
 - readFile: { "type": "readFile", "path": "relative/file.ts" }
 - mkdir: { "type": "mkdir", "path": "relative/path" }
-- createFile: { "type": "createFile", "path": "relative/file.ts" }
 - writeFile: { "type": "writeFile", "path": "relative/file.ts", "content": "COMPLETE file contents here" }
 - appendFile: { "type": "appendFile", "path": "relative/file.ts", "content": "content to append" }
-- replaceText: { "type": "replaceText", "path": "relative/file.ts", "targetContent": "exact old text to replace", "content": "new text" }
+- listFiles: { "type": "listFiles", "path": "src/components" }
+- readFile: { "type": "readFile", "path": "src/App.tsx" }
 - deleteFile: { "type": "deleteFile", "path": "relative/file.ts" }
 - renameFile: { "type": "renameFile", "oldPath": "old.ts", "newPath": "new.ts" }
 - installDependency: { "type": "installDependency", "packages": ["pkg"], "dev": false }
@@ -1046,7 +1095,7 @@ Return ONLY valid JSON:
   "nextSteps": []
 }
 
-
+REMEMBER: You are an EXECUTOR, not an advisor. Write the code. Create the files. Do it now.
 Every file must contain COMPLETE production code. No TODOs, no stubs, no placeholders.
 Use relative paths only. Do not include destructive commands. If a file must be changed, provide the complete replacement content for writeFile.
 
@@ -1188,10 +1237,6 @@ function validateCompleteness(actions: AgentAction[]): string[] {
           warnings.push(`File ${(action as { path: string }).path} contains placeholder code`);
           break;
         }
-      }
-      // Flag suspiciously short files (likely stubs)
-      if (content.trim().split('\n').length < 5 && !/\.(json|yml|yaml|env|gitignore|example)$/.test((action as { path: string }).path)) {
-        warnings.push(`File ${(action as { path: string }).path} is suspiciously short (${content.trim().split('\n').length} lines)`);
       }
     }
   }
@@ -1590,26 +1635,19 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
   for (const action of allActions) {
     try {
       if (action.type === 'listFiles') {
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: (action as { path?: string }).path || '.', success: true, output: 'Local workspace: will be handled by frontend if needed' });
-        //   continue;
-        // }
-        const target = resolveAgentActionPath((action as { path?: string }).path || '.', effectiveRoot);
+        const a = action as { path?: string };
+        const target = resolveAgentActionPath(a.path || '.', effectiveRoot);
         const entries = await fs.readdir(target, { withFileTypes: true });
         const output = entries
           .map((entry) => `${entry.isDirectory() ? 'dir ' : 'file'} ${entry.name}`)
           .join('\n') || '(empty directory)';
-        result.actions.push({ type: action.type, target: (action as { path?: string }).path || '.', success: true, output });
+        result.actions.push({ ...action, type: action.type, path: a.path, target: a.path || '.', success: true, output });
 
       } else if (action.type === 'readFile') {
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: (action as { path: string }).path, success: true, output: 'Local workspace: will be read by frontend if needed' });
-        //   continue;
-        // }
         const a = action as { path: string };
         const target = resolveAgentActionPath(a.path, effectiveRoot);
         const content = await fs.readFile(target, 'utf-8');
-        result.actions.push({ type: action.type, target: a.path, success: true, output: content.slice(0, MAX_OUTPUT) });
+        result.actions.push({ ...action, type: action.type, path: a.path, target: a.path, success: true, output: content.slice(0, MAX_OUTPUT) });
 
       } else if (action.type === 'mkdir') {
         const a = action as { path: string };
@@ -1617,7 +1655,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         await fs.mkdir(target, { recursive: true });
         const stat = await fs.stat(target);
         if (!stat.isDirectory()) throw new Error(`Directory creation verification failed: ${a.path}`);
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'Directory created' });
+        result.actions.push({ ...action, type: action.type, path: a.path, target: a.path, success: true, output: 'Directory created' });
 
       } else if (action.type === 'createFile') {
         const a = action as { path: string; content?: string };
@@ -1627,7 +1665,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         await fs.writeFile(target, contentToWrite, 'utf-8');
         const stat = await fs.stat(target);
         if (!stat.isFile()) throw new Error(`File creation verification failed: ${a.path}`);
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File created' });
+        result.actions.push({ ...action, type: action.type, path: a.path, target: a.path, success: true, output: 'File created' });
 
       } else if (action.type === 'writeFile') {
         const a = action as { path: string; content: string };
@@ -1639,7 +1677,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         if (contentToWrite.length > 0 && stat.size === 0) {
           throw new Error(`Write verification failed: file size 0 for ${a.path}`);
         }
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File written' });
+        result.actions.push({ ...action, type: action.type, path: a.path, content: a.content, target: a.path, success: true, output: 'File written' });
 
       } else if (action.type === 'appendFile') {
         const a = action as { path: string; content: string };
@@ -1648,7 +1686,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         await fs.appendFile(target, a.content || '', 'utf-8');
         const stat = await fs.stat(target);
         if (!stat.isFile()) throw new Error(`Append verification failed: ${a.path}`);
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File appended' });
+        result.actions.push({ ...action, type: action.type, path: a.path, content: a.content, target: a.path, success: true, output: 'File appended' });
 
       } else if (action.type === 'deleteFile') {
         const a = action as { path: string };
@@ -1664,7 +1702,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         }
         const stillExists = await fs.stat(target).then(() => true).catch(() => false);
         if (stillExists) throw new Error(`Delete verification failed: ${a.path}`);
-        result.actions.push({ type: action.type, target: a.path, success: true, output: 'File deleted' });
+        result.actions.push({ ...action, type: action.type, path: a.path, target: a.path, success: true, output: 'File deleted' });
 
       } else if (action.type === 'renameFile') {
         const a = action as { oldPath: string; newPath: string };
@@ -1674,29 +1712,24 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
         await fs.rename(oldTarget, newTarget);
         const newExists = await fs.stat(newTarget).then(() => true).catch(() => false);
         if (!newExists) throw new Error(`Rename verification failed: ${a.newPath} does not exist`);
-        result.actions.push({ type: action.type, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'File renamed' });
+        result.actions.push({ ...action, type: action.type, oldPath: a.oldPath, newPath: a.newPath, target: `${a.oldPath} -> ${a.newPath}`, success: true, output: 'File renamed' });
 
       } else if (action.type === 'installDependency') {
         const a = action as { packages: string[]; dev?: boolean };
         const packages = Array.isArray(a.packages) ? a.packages.filter(Boolean) : [];
         if (packages.length === 0) throw new Error('No packages were provided');
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: packages.join(', '), success: false, output: 'Cannot run npm commands directly on local folders from browser.' });
-          // continue;
-        // }
         const command = `npm install ${a.dev ? '-D ' : ''}${packages.join(' ')}`;
         const output = await runWorkspaceCommand(command, effectiveRoot);
-        result.actions.push({ type: action.type, target: packages.join(', '), success: true, output });
+        result.actions.push({ ...action, type: action.type, target: packages.join(', '), success: true, output });
 
       } else if (action.type === 'runCommand') {
         const a = action as { command: string; cwd?: string };
-        // if (isLocalWorkspace) {
-        result.actions.push({ type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: false, output: 'Cannot run terminal commands directly on local folders from browser.' });
-          // continue;
-        // }
         const commandRoot = a.cwd ? resolveAgentActionPath(a.cwd, effectiveRoot) : effectiveRoot;
         const output = await runWorkspaceCommand(a.command, commandRoot);
-        result.actions.push({ type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: true, output });
+        result.actions.push({ ...action, type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: true, output });
+        const commandRoot = a.cwd ? resolveAgentActionPath(a.cwd, effectiveRoot) : effectiveRoot;
+        const output = await runWorkspaceCommand(a.command, commandRoot);
+        result.actions.push({ ...action, type: action.type, target: a.cwd ? `${a.cwd}: ${a.command}` : a.command, success: true, output });
 
       } else if (action.type === 'detectLanguages') {
         const langs = await detectWorkspaceLanguages(effectiveRoot);
@@ -1717,6 +1750,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
           }
         }
         result.actions.push({
+          ...action,
           type: action.type,
           target: 'workspace',
           success: true,
@@ -1736,6 +1770,7 @@ Return ONLY valid JSON matching this schema: {summary:string, plan:string[], act
           });
         }
         result.actions.push({
+          ...action,
           type: action.type,
           target: a.extensionId,
           success: true,

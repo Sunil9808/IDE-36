@@ -16,8 +16,6 @@ import { terminalService } from '../services/terminalService';
 import { workspaceService } from '../services/workspaceService';
 import { useTerminalStore } from '../store/terminalStore';
 import { initializeExtensionRuntime } from '../services/extensionRuntime';
-import { ErrorParser } from '../services/execution/ErrorParser';
-import ExecutionErrorModal from '../components/Modals/ExecutionErrorModal';
 
 export default function WorkspaceLayout() {
   const {
@@ -62,13 +60,9 @@ export default function WorkspaceLayout() {
       addSession(session);
     });
 
-    const handleParseErrors = (e: any) => ErrorParser.parseTerminalOutput(e.detail);
-    window.addEventListener('ai-web-ide:parse-errors', handleParseErrors);
-
     return () => {
       cleanupRuntime();
       terminalService.disconnect();
-      window.removeEventListener('ai-web-ide:parse-errors', handleParseErrors);
     };
   }, []);
 
@@ -244,7 +238,6 @@ export default function WorkspaceLayout() {
 
       {/* Command Palette Overlay */}
       {commandPaletteOpen && <CommandPalette />}
-      <ExecutionErrorModal />
     </div>
   );
 }

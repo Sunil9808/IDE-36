@@ -13,6 +13,8 @@ interface FileStore {
   selectFile: (fileId: string | null) => void;
   toggleFolder: (folderId: string) => void;
   expandFolder: (folderId: string) => void;
+  expandFoldersByPaths: (paths: string[]) => void;
+  expandAllFolders: () => void;
   collapseFolder: (folderId: string) => void;
   addFile: (file: FileNode) => void;
   removeFile: (fileId: string) => void;
@@ -70,6 +72,25 @@ const renameFileById = (nodes: FileNode[], id: string, newName: string): FileNod
   });
 };
 
+const findAllDirectoryIds = (nodes: FileNode[], targetPaths?: string[]): string[] => {
+  let ids: string[] = [];
+  for (const node of nodes) {
+    if (node.type === 'directory') {
+      const normalizedNodePath = node.path.replace(/\\/g, '/');
+      if (!targetPaths || targetPaths.length === 0 || targetPaths.some(tp => {
+        const normTp = tp.replace(/\\/g, '/');
+        return normalizedNodePath.endsWith(normTp) || normTp.endsWith(node.name) || normalizedNodePath.includes(normTp);
+      })) {
+        ids.push(node.id);
+      }
+      if (node.children) {
+        ids = ids.concat(findAllDirectoryIds(node.children, targetPaths));
+      }
+    }
+  }
+  return ids;
+};
+
 export const useFileStore = create<FileStore>((set, get) => ({
   fileTree: [],
   selectedFileId: null,
@@ -98,6 +119,24 @@ export const useFileStore = create<FileStore>((set, get) => ({
     set((state) => {
       const expanded = new Set(state.expandedFolders);
       expanded.add(folderId);
+      return { expandedFolders: expanded };
+    });
+  },
+
+  expandFoldersByPaths: (paths: string[]) => {
+    set((state) => {
+      const expanded = new Set(state.expandedFolders);
+      const matchingIds = findAllDirectoryIds(state.fileTree, paths);
+      matchingIds.forEach(id => expanded.add(id));
+      return { expandedFolders: expanded };
+    });
+  },
+
+  expandAllFolders: () => {
+    set((state) => {
+      const expanded = new Set(state.expandedFolders);
+      const allDirIds = findAllDirectoryIds(state.fileTree);
+      allDirIds.forEach(id => expanded.add(id));
       return { expandedFolders: expanded };
     });
   },

@@ -1,4 +1,3 @@
-import './services/FileWatcher';
 import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import AppRoutes from './routes/AppRoutes';

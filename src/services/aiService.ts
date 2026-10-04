@@ -161,7 +161,6 @@ export const aiService = {
       }
     }
   },
-
   buildContextString(context: AIContext): string {
     let ctx = '';
     if (context.workspaceName) ctx += `Workspace: ${context.workspaceName}\n`;

@@ -25,20 +25,6 @@ export default function BottomPanel() {
     }, 50);
   };
 
-  const renderPanel = () => {
-    switch (activeBottomPanel) {
-      case 'terminal':  return <Terminal />;
-      case 'preview':   return <PreviewPanel />;
-      case 'output':    return <OutputPanel />;
-      case 'problems':  return <ProblemsPanel />;
-      default: return (
-        <div className="flex items-center justify-center h-full text-xs" style={{ color: 'var(--text-1)' }}>
-          {activeBottomPanel} panel
-        </div>
-      );
-    }
-  };
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Panel tab bar */}
@@ -81,9 +67,19 @@ export default function BottomPanel() {
         </div>
       </div>
 
-      {/* Panel content */}
-      <div className="flex-1 overflow-hidden">
-        {renderPanel()}
+      {/* Panel content (Keep Terminal mounted with display toggle so PTY session is never lost) */}
+      <div className="flex-1 overflow-hidden relative">
+        <div style={{ display: activeBottomPanel === 'terminal' ? 'block' : 'none', height: '100%', width: '100%' }}>
+          <Terminal />
+        </div>
+        {activeBottomPanel === 'preview' && <PreviewPanel />}
+        {activeBottomPanel === 'output' && <OutputPanel />}
+        {activeBottomPanel === 'problems' && <ProblemsPanel />}
+        {activeBottomPanel !== 'terminal' && activeBottomPanel !== 'preview' && activeBottomPanel !== 'output' && activeBottomPanel !== 'problems' && (
+          <div className="flex items-center justify-center h-full text-xs" style={{ color: 'var(--text-1)' }}>
+            {activeBottomPanel} panel
+          </div>
+        )}
       </div>
     </div>
   );

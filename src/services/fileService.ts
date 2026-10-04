@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { FileNode, FileContent } from '../types/file.types';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { getLanguageFromExtension } from '../utils/fileHelpers';
 
 const BASE_URL = '/api';
 
@@ -128,14 +129,16 @@ export const fileService = {
       const fileHandle = await resolveHandle(handle, filePath, true);
       const file = await fileHandle.getFile();
       const content = await file.text();
-      return { 
-        content, 
-        encoding: 'utf8',
+      const fileName = fileHandle.name;
+      const language = getLanguageFromExtension(fileName);
+      return {
         path: filePath,
-        language: this.getLanguageFromExtension(filePath),
+        content,
+        encoding: 'utf8',
+        language,
         size: file.size,
-        lastModified: file.lastModified
-      } as any;
+        lastModified: file.lastModified,
+      };
     }
     const { data } = await axios.get(`${BASE_URL}/files/read`, {
       params: { path: filePath },

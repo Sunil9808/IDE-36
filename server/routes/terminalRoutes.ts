@@ -3,72 +3,59 @@ import { exec, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { getWorkspaceRoot } from '../utils/workspaceRoot';
+import { terminalManager } from '../terminal/terminalManager';
 
 const router = Router();
 
-function resolveCommandCwd(value: unknown) {
-  const workspaceRoot = getWorkspaceRoot();
-  const requested = typeof value === 'string' ? value.trim() : '';
-  if (!requested) return workspaceRoot;
-
-  const resolved = path.isAbsolute(requested)
-    ? path.resolve(requested)
-    : path.resolve(workspaceRoot, requested);
-  if (path.isAbsolute(requested) && fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-    return resolved;
-  }
-
-  const relative = path.relative(workspaceRoot, resolved);
-  if (!relative.startsWith('..') && !path.isAbsolute(relative) && fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-    return resolved;
-  }
-
-  return workspaceRoot;
-}
-
-function resolveCdTarget(cwd: unknown, target: unknown) {
-  const base = resolveCommandCwd(cwd);
-  const requested = String(target || '').trim();
-  if (!requested || requested === '~') return os.homedir();
-
-  const normalizedTarget = requested.replace(/^["']|["']$/g, '');
-  const resolved = path.isAbsolute(normalizedTarget)
-    ? path.resolve(normalizedTarget)
-    : path.resolve(base, normalizedTarget);
-
-  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
-    throw new Error(`Directory not found: ${normalizedTarget}`);
-  }
-
-  return resolved;
-}
-
-function isLongRunningTask(command: string) {
-  return [
-    /^npm\s+run\s+dev(?::client|:server)?(?:\s|$)/i,
-    /^npm\s+start(?:\s|$)/i,
-    /^vite(?:\s|$)/i,
-    /^npx\s+vite(?:\s|$)/i,
-    /^pnpm\s+dev(?:\s|$)/i,
-    /^yarn\s+dev(?:\s|$)/i,
-  ].some((pattern) => pattern.test(command));
-}
-
 router.get('/sessions', (_req: Request, res: Response) => {
-  res.json([]);
+  res.json(terminalManager.getSessions());
 });
 
 router.post('/create', (req: Request, res: Response) => {
-  res.json({ sessionId: Math.random().toString(36).slice(2), shell: '/bin/bash' });
+  try {
+    const { shell, cwd, cols, rows } = req.body || {};
+    const sessionId = Math.random().toString(36).slice(2);
+    const sessionInfo = terminalManager.createSession({
+      sessionId,
+      shell,
+      cwd,
+      cols,
+      rows,
+    });
+    res.json(sessionInfo);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to create terminal session' });
+  }
 });
 
 router.post('/cwd', (req: Request, res: Response) => {
   try {
-    const cwd = resolveCdTarget(req.body?.cwd, req.body?.target);
-    res.json({ cwd });
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Unable to resolve directory' });
+    const target = req.body?.target;
+    const baseCwd = req.body?.cwd;
+    
+    let resolvedBase = terminalManager.resolveDirectory(baseCwd);
+    let finalPath = resolvedBase;
+
+    if (target && typeof target === 'string') {
+      const requested = target.trim().replace(/^["']|["']$/g, '');
+      if (requested === '~') {
+        finalPath = os.homedir();
+      } else {
+        const candidate = path.isAbsolute(requested)
+          ? path.resolve(requested)
+          : path.resolve(resolvedBase, requested);
+        
+        if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+          finalPath = candidate;
+        } else {
+          return res.status(400).json({ error: `Directory not found: ${requested}` });
+        }
+      }
+    }
+
+    res.json({ cwd: terminalManager.resolveDirectory(finalPath) });
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || 'Unable to resolve directory' });
   }
 });
 
@@ -76,20 +63,20 @@ router.get('/userinfo', (_req: Request, res: Response) => {
   try {
     const userInfo = os.userInfo();
     res.json({ username: userInfo.username, hostname: os.hostname() });
-  } catch (error) {
+  } catch {
     res.json({ username: 'user', hostname: 'local' });
   }
 });
 
 router.get('/gitinfo', (req: Request, res: Response) => {
-  const cwd = resolveCommandCwd(req.query.cwd);
-  
+  const cwd = terminalManager.resolveDirectory(req.query.cwd as string);
+
   exec('git rev-parse --abbrev-ref HEAD', { cwd, windowsHide: true }, (error, stdout) => {
     if (error) {
       return res.json({ branch: null, dirty: false });
     }
     const branch = stdout.trim();
-    
+
     exec('git status --porcelain', { cwd, windowsHide: true }, (statusError, statusStdout) => {
       const dirty = !statusError && statusStdout.trim().length > 0;
       res.json({ branch, dirty });
@@ -97,7 +84,7 @@ router.get('/gitinfo', (req: Request, res: Response) => {
   });
 });
 
-// ── Real-time streaming terminal via SSE ─────────────────────────────────────
+// Real-time streaming terminal endpoint via SSE (Fallback mode when socket.io is unavailable)
 router.post('/stream', (req: Request, res: Response) => {
   const command = String(req.body?.command || '').trim();
   if (!command) {
@@ -105,9 +92,8 @@ router.post('/stream', (req: Request, res: Response) => {
     return;
   }
 
-  const commandCwd = resolveCommandCwd(req.body?.cwd);
+  const commandCwd = terminalManager.resolveDirectory(req.body?.cwd);
 
-  // Set SSE headers for streaming
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -118,23 +104,6 @@ router.post('/stream', (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify({ type, ...((typeof data === 'object' && data) ? data : { value: data }) })}\n\n`);
   };
 
-  // Long-running tasks: spawn in background, notify client
-  if (isLongRunningTask(command)) {
-    const child = spawn(command, {
-      cwd: commandCwd,
-      shell: true,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.unref();
-    writeEvent('stdout', { text: `Started background task: ${command}\nWorkspace: ${commandCwd}\n` });
-    writeEvent('exit', { code: 0 });
-    res.end();
-    return;
-  }
-
-  // Spawn process and stream output chunks in real time
   const child = spawn(command, {
     cwd: commandCwd,
     shell: true,
@@ -172,13 +141,11 @@ router.post('/stream', (req: Request, res: Response) => {
     res.end();
   });
 
-  // Kill child if client disconnects
   req.on('close', () => {
     try { child.kill(); } catch {}
   });
 });
 
-// ── Legacy single-shot run endpoint (kept for compatibility) ─────────────────
 router.post('/run', (req: Request, res: Response) => {
   const command = String(req.body?.command || '').trim();
   if (!command) {
@@ -186,25 +153,7 @@ router.post('/run', (req: Request, res: Response) => {
     return;
   }
 
-  const commandCwd = resolveCommandCwd(req.body?.cwd);
-
-  if (isLongRunningTask(command)) {
-    const child = spawn(command, {
-      cwd: commandCwd,
-      shell: true,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.unref();
-    res.json({
-      command,
-      cwd: commandCwd,
-      exitCode: 0,
-      output: `Started background task: ${command}\nWorkspace: ${commandCwd}\n`,
-    });
-    return;
-  }
+  const commandCwd = terminalManager.resolveDirectory(req.body?.cwd);
 
   exec(command, {
     cwd: commandCwd,

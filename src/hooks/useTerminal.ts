@@ -6,9 +6,9 @@ import { v4 as uuidv4 } from '../utils/uuid';
 export function useTerminal() {
   const { sessions, activeSessionId, addSession, removeSession, setActiveSession, isVisible, setVisible } = useTerminalStore();
 
-  const createSession = useCallback(() => {
+  const createSession = useCallback((shell = 'powershell.exe', cwd = '') => {
     const sessionId = uuidv4();
-    terminalService.createSession('/bin/bash', '/workspace');
+    terminalService.createSession({ sessionId, shell, cwd });
   }, []);
 
   const destroySession = useCallback((sessionId: string) => {
@@ -17,7 +17,7 @@ export function useTerminal() {
   }, [removeSession]);
 
   const sendCommand = useCallback((sessionId: string, command: string) => {
-    terminalService.sendData(sessionId, command + '\n');
+    terminalService.sendData(sessionId, command + '\r');
   }, []);
 
   return {

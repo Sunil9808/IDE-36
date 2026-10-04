@@ -62,8 +62,7 @@ export default function Explorer() {
   const { fileTree, expandedFolders, toggleFolder, collapseFolder, selectedFileId, selectFile, setFileTree } = useFileStore();
   const workspace = useWorkspaceStore((state) => state.workspace);
   const { openTab } = useEditorStore();
-  const { addNotification } = useUIStore();
-  
+  const { addNotification, setActiveBottomPanel, setBottomPanelVisible } = useUIStore();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -181,9 +180,9 @@ export default function Explorer() {
     }
   };
 
-  const startRename = (node: FileNode) => {
-    setRenamingNodeId(node.id);
-  };
+  const renameNode = async (node: FileNode) => {
+    const newName = window.prompt('New name', node.name)?.trim();
+    if (!newName || newName === node.name) return;
 
   const submitRename = async (node: FileNode, newName: string) => {
     setRenamingNodeId(null);
@@ -250,95 +249,18 @@ export default function Explorer() {
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   };
 
-  // Keyboard navigation
-  const getFlatNodes = useCallback((nodes: FileNode[], result: FileNode[] = []) => {
-    for (const node of nodes) {
-      result.push(node);
-      if (node.type === 'directory' && expandedFolders.has(node.id) && node.children) {
-        getFlatNodes(node.children, result);
-      }
-    }
-    return result;
-  }, [expandedFolders]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (renamingNodeId || creatingState) return;
-    if (!selectedFileId) return;
-    const flatNodes = getFlatNodes(filteredTree);
-    const currentIndex = flatNodes.findIndex(n => n.id === selectedFileId);
-    if (currentIndex === -1) return;
-
-    const selectedNode = flatNodes[currentIndex];
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        if (currentIndex < flatNodes.length - 1) selectFile(flatNodes[currentIndex + 1].id);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        if (currentIndex > 0) selectFile(flatNodes[currentIndex - 1].id);
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        if (selectedNode.type === 'directory' && !expandedFolders.has(selectedNode.id)) toggleFolder(selectedNode.id);
-        break;
-      case 'ArrowLeft':
-        e.preventDefault();
-        if (selectedNode.type === 'directory' && expandedFolders.has(selectedNode.id)) collapseFolder(selectedNode.id);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        handleFileClick(selectedNode);
-        break;
-      case 'F2':
-        e.preventDefault();
-        startRename(selectedNode);
-        break;
-      case 'Delete':
-        e.preventDefault();
-        deleteNode(selectedNode);
-        break;
-    }
-  };
-
-  // Click outside context menu
-  useEffect(() => {
-    const closeMenu = () => setContextMenu(null);
-    window.addEventListener('click', closeMenu);
-    return () => window.removeEventListener('click', closeMenu);
-  }, []);
-
   return (
-    <div className="flex h-full flex-col outline-none overflow-hidden bg-[var(--bg-0)] text-[var(--text-0)]" tabIndex={0} onKeyDown={handleKeyDown}>
-      {/* Header */}
-      <div className="flex flex-col border-b border-[var(--border-0)] pb-1">
-        <div className="flex h-9 items-center justify-between px-3 no-select">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-1)]">
-            Explorer
-          </span>
-          {workspace && (
-            <div className="flex items-center gap-0.5">
-              <IconBtn icon={<Plus size={14} />} title="New File" onClick={() => startCreate('file')} />
-              <IconBtn icon={<FolderPlus size={14} />} title="New Folder" onClick={() => startCreate('directory')} />
-              <IconBtn icon={<RefreshCw size={13} />} title="Refresh" onClick={() => refreshExplorer()} />
-              <IconBtn icon={<ChevronsDownUp size={13} />} title="Collapse All" onClick={collapseAll} />
-            </div>
-          )}
-        </div>
-        
-        {workspace && (
-          <div className="px-3 pb-2 pt-1">
-            <div className="relative">
-              <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-[var(--text-2)]" />
-              <input
-                type="text"
-                className="w-full rounded border border-[var(--border-0)] bg-[var(--bg-1)] py-1 pl-7 pr-2 text-xs text-[var(--text-0)] outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--text-2)]"
-                placeholder="Filter files..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+    <div className="flex h-full flex-col overflow-hidden" onClick={() => setContextMenu(null)}>
+      <div className="flex h-9 items-center justify-between px-3 no-select">
+        <span className="text-[11px] font-medium uppercase tracking-normal" style={{ color: 'var(--color-text)' }}>
+          Explorer
+        </span>
+        {workspace ? (
+          <div className="flex items-center gap-1">
+            <IconBtn icon={<Plus size={14} />} title="New File" onClick={createFile} />
+            <IconBtn icon={<FolderPlus size={14} />} title="New Folder" onClick={createFolder} />
+            <IconBtn icon={<RefreshCw size={13} />} title="Refresh" onClick={refreshExplorer} />
+            <IconBtn icon={<ChevronsDownUp size={13} />} title="Collapse All" onClick={collapseAll} />
           </div>
         )}
       </div>
@@ -419,40 +341,27 @@ export default function Explorer() {
           }}
         >
           {[
-            { label: 'New File', show: contextMenu.node.type === 'directory', action: () => startCreate('file') },
-            { label: 'New Folder', show: contextMenu.node.type === 'directory', action: () => startCreate('directory') },
-            { divider: true, show: contextMenu.node.type === 'directory' },
-            { label: 'Open', show: contextMenu.node.type === 'file', action: () => handleFileClick(contextMenu.node) },
-            { label: 'Open to the Side', show: contextMenu.node.type === 'file', action: () => {
-                useEditorStore.getState().setSplitConfig({ enabled: true, direction: 'vertical' });
-                handleFileClick(contextMenu.node);
-            } },
-            { label: 'Run in Terminal', show: contextMenu.node.type === 'file', action: () => {
-                handleFileClick(contextMenu.node);
-                setTimeout(() => window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-run-active')), 200);
-            } },
-            { divider: true, show: contextMenu.node.type === 'file' },
-            { label: 'Rename', show: true, action: () => startRename(contextMenu.node) },
-            { label: 'Delete', show: true, action: () => deleteNode(contextMenu.node), danger: true },
-            { divider: true, show: true },
-            { label: 'Find in Folder...', show: contextMenu.node.type === 'directory', action: () => {
-                const relativePath = contextMenu.node.path.replace(workspace?.path || '', '').replace(/^[\\/]/, '');
-                useUIStore.getState().setActiveSidebarPanel('search');
-                window.dispatchEvent(new CustomEvent('ai-web-ide:search-in-folder', { detail: relativePath }));
-            } },
-            { label: 'Open in Terminal', show: true, action: () => {
-                const targetCwd = contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/');
-                useUIStore.getState().setBottomPanelVisible(true);
-                useUIStore.getState().setActiveBottomPanel('terminal');
-                setTimeout(() => window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-cd', { detail: targetCwd })), 100);
-            } },
-            { divider: true, show: true },
-            { label: 'Copy Path', show: true, action: () => navigator.clipboard?.writeText(contextMenu.node.path) },
-            { label: 'Copy Relative Path', show: true, action: () => copyRelativePath(contextMenu.node) },
-          ].map((item, i) => {
-            if (!item.show) return null;
-            if (item.divider) return <div key={i} className="my-1 border-t border-[var(--border-0)]" />;
-            return (
+            { label: 'New File', action: () => void createFileInFolder(contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/')) },
+            { label: 'New Folder', action: () => void createFolderInFolder(contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/')) },
+            null,
+            { label: 'Rename', action: () => void renameNode(contextMenu.node) },
+            { label: 'Delete', action: () => void deleteNode(contextMenu.node) },
+            null,
+            { label: 'Copy Path', action: () => navigator.clipboard?.writeText(contextMenu.node.path) },
+            { label: 'Copy Relative Path', action: () => copyRelativePath(contextMenu.node) },
+            null,
+            { label: 'Open in Integrated Terminal', action: () => {
+              const targetDir = contextMenu.node.type === 'directory' ? contextMenu.node.path : contextMenu.node.path.split(/[\\/]/).slice(0, -1).join('/');
+              setActiveBottomPanel('terminal');
+              setBottomPanelVisible(true);
+              window.setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('ai-web-ide:terminal-command', { detail: { action: 'new', cwd: targetDir } }));
+              }, 50);
+            }},
+          ].map((item, i) =>
+            item === null ? (
+              <div key={i} className="my-1" style={{ borderTop: '1px solid var(--color-border)' }} />
+            ) : (
               <button
                 key={i}
                 className={`w-full px-4 py-1.5 text-left transition-colors hover:bg-[var(--accent)] hover:text-white ${item.danger ? 'text-[var(--error)] hover:bg-[var(--error)]' : 'text-[var(--text-0)]'}`}

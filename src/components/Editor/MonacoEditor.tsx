@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from '../../utils/uuid';
 import { ChatMessage } from '../../types/ai.types';
 import { ExtensionItem, supportsFormatting, supportsLanguage, useExtensionStore } from '../../store/extensionStore';
 import { getExtensionCompletionItems } from '../../services/extensionCompletionService';
-import { fetchInlineCompletion, fetchDropdownCompletion } from '../../services/inlineCompletionService';
+import { fetchInlineCompletion } from '../../services/inlineCompletionService';
 import { configureMonacoEditor } from '../../setup/monacoSetup';
 import { setMonacoInstance } from '../../services/extensionRuntime';
 
@@ -73,7 +73,7 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
     editorRef.current = editor;
     monacoRef.current = monaco;
     registerEditorThemes(monaco);
-    
+    registerSmartCompletionProviders(monaco);
     registerInlineCompletionProvider(monaco);
 
     // Wire Monaco into the extension runtime so linting, formatting,
@@ -82,9 +82,6 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
 
     // Set editor content
     editor.setValue(content);
-    
-    // Autofocus editor when opened
-    editor.focus();
 
     // Track cursor position
     editor.onDidChangeCursorPosition((e: Monaco.editor.ICursorPositionChangedEvent) => {
@@ -692,21 +689,38 @@ export default function MonacoEditor({ tabId, filePath, content, language, onCon
     return () => window.removeEventListener('ai-web-ide:editor-command', runCommand);
   }, []);
 
-  
-
-
-
-
+  // Update content when tab changes
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.getValue() !== content) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        editorRef.current.pushUndoStop();
+        model.pushEditOperations(
+          [],
+          [{ range: model.getFullModelRange(), text: content }],
+          () => null
+        );
+        editorRef.current.pushUndoStop();
+      }
+    }
+  }, [content]);
 
   return (
-    <div className="relative h-full w-full">
-        <MonacoEditorReact
-          height="100%"
-          path={filePath}
-          language={language}
-          theme={monacoTheme}
-          value={content}
-          beforeMount={handleBeforeMount}
+    <div
+      className={`relative h-full w-full ${showEmptyEditorBackground ? 'empty-monaco-background' : ''}`}
+      style={showEmptyEditorBackground ? {
+        backgroundImage: `url("${EMPTY_EDITOR_BACKGROUND_IMAGE}")`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      } : undefined}
+    >
+      <MonacoEditorReact
+        height="100%"
+        language={language}
+        theme={monacoTheme}
+        value={content}
+        beforeMount={handleBeforeMount}
         onMount={handleMount}
         onChange={handleChange}
         options={{

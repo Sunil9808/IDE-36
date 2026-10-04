@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react';
-import { localServerManager, LocalServer } from '../../services/LocalServerManager';
-import { AlertTriangle, Bell, Bot, GitBranch, Puzzle, Radio, Rocket, XCircle, Sparkles } from 'lucide-react';
+import { AlertTriangle, Bell, Bot, GitBranch, Puzzle, Radio, Rocket, XCircle } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useExtensionStore } from '../../store/extensionStore';
 import { useEditorStore } from '../../store/editorStore';
@@ -30,17 +28,6 @@ export default function StatusBar() {
     setActiveBottomPanel(panel);
     setBottomPanelVisible(true);
   };
-
-  
-  const [servers, setServers] = useState<LocalServer[]>([]);
-  
-  useEffect(() => {
-     const unsubscribe = localServerManager.subscribe((newServers) => {
-        setServers(newServers);
-     });
-     setServers(localServerManager.getServers());
-     return () => { unsubscribe(); };
-  }, []);
 
   const runDevServer = async () => {
     showPanel('terminal');
@@ -79,20 +66,15 @@ export default function StatusBar() {
           <span>{branch || (workspace?.name ? 'main' : 'No repo')}</span>
         </button>
 
-        
-          {servers.length > 0 && (
-             <button
-               title="Open Preview"
-               className="status-btn text-green-400"
-               onClick={() => {
-                  window.dispatchEvent(new CustomEvent('ai-web-ide:server-registered', { detail: servers[servers.length - 1] }));
-               }}
-             >
-                <div className="w-2 h-2 rounded-full bg-green-500 mr-1" />
-                <span>localhost:{servers[servers.length - 1].port}</span>
-             </button>
-          )}
-
+        <button
+          title="Run project (npm run dev)"
+          aria-label="Run project"
+          className="status-btn"
+          onClick={() => void runDevServer()}
+        >
+          <Rocket size={12} />
+          <span>Run</span>
+        </button>
 
         <button
           title="Problems"
